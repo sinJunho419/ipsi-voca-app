@@ -1,5 +1,5 @@
 /** words 테이블의 레벨 */
-export type Level = 'elem_low' | 'elem_mid' | 'elem_high' | 'middle' | 'high'
+export type Level = 'elem_low' | 'middle_1' | 'middle_2' | 'middle_3'
 
 /** words 테이블 행 타입 */
 export interface Word {

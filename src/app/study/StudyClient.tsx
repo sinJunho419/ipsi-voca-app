@@ -9,11 +9,10 @@ import { useRouter } from 'next/navigation'
 import QuizClient from './QuizClient'
 
 const LEVELS: { value: Level; label: string }[] = [
-    { value: 'elem_low', label: '초등 저학년' },
-    { value: 'elem_mid', label: '초등 중학년' },
-    { value: 'elem_high', label: '초등 고학년' },
-    { value: 'middle', label: '중학교' },
-    { value: 'high', label: '고등학교' },
+    { value: 'elem_low', label: '초등 영단어' },
+    { value: 'middle_1', label: '중등 1학년' },
+    { value: 'middle_2', label: '중등 2학년' },
+    { value: 'middle_3', label: '중등 3학년' },
 ]
 
 type Tab = 'study' | 'quiz'
