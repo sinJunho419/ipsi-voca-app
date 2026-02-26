@@ -53,7 +53,8 @@ export async function GET(request: NextRequest) {
     }
 
     if (!verifyHmac(secret, userId, ts, token)) {
-        return new NextResponse('Invalid token signature', { status: 401 })
+        console.error(`Invalid SSO Signature: user_id=${userId}, ts=${ts}, token=${token}`);
+        return new NextResponse('Invalid token signature (HMAC mismatch)', { status: 401 })
     }
 
     // ── 3. 타임스탬프 유효성 (5분 이내) ──────────────────────────────
