@@ -1,0 +1,36 @@
+import type { NextConfig } from 'next'
+import path from 'path'
+
+const nextConfig: NextConfig = {
+  // Supabase Storage 이미지 허용
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '*.supabase.co',
+        pathname: '/storage/v1/object/public/**',
+      },
+    ],
+  },
+
+  // Turbopack 루트 경고 제거 (C:\Users\PC\package-lock.json 충돌 방지)
+  turbopack: {
+    root: path.resolve(__dirname),
+  },
+
+  // 보안 헤더
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+        ],
+      },
+    ]
+  },
+}
+
+export default nextConfig

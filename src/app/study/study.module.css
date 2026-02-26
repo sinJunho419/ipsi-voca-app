@@ -1,0 +1,496 @@
+/* ════════════════════════════════════════
+   영단어 학습 앱 — Glassmorphism UI
+   ════════════════════════════════════════ */
+
+/* ── 페이지 래퍼 ── */
+.page {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2.5rem 1.25rem 4rem;
+  overflow: hidden;
+}
+
+/* 배경 블러 블롭 */
+.page::before,
+.page::after {
+  content: '';
+  position: fixed;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.45;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.page::before {
+  width: 520px;
+  height: 520px;
+  background: radial-gradient(circle, #a5b4fc 0%, #818cf8 60%, transparent 100%);
+  top: -140px;
+  left: -160px;
+}
+
+.page::after {
+  width: 420px;
+  height: 420px;
+  background: radial-gradient(circle, #f9a8d4 0%, #ec4899 60%, transparent 100%);
+  bottom: -120px;
+  right: -120px;
+}
+
+/* ── 헤더 ── */
+.header {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.title {
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+}
+
+.subtitle {
+  font-size: 0.9rem;
+  color: var(--text-sub);
+  margin-top: 0.3rem;
+  font-weight: 500;
+}
+
+/* ── 벤토 그리드 래퍼 ── */
+.bento {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* ── 공통 Glass 카드 ── */
+.glass {
+  background: var(--surface);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  border: 1.5px solid var(--border);
+  border-radius: 1.75rem;
+  box-shadow: var(--shadow);
+}
+
+/* ── 레벨/세트 컨트롤 박스 ── */
+.controls {
+  display: flex;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+}
+
+.controls select {
+  flex: 1;
+  padding: 0.6rem 0.9rem;
+  border-radius: 1rem;
+  border: 1.5px solid rgba(99, 102, 241, 0.2);
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.2s;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236366f1' stroke-width='1.8' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.8rem center;
+  padding-right: 2.2rem;
+}
+
+.controls select:focus {
+  border-color: var(--blue);
+}
+
+/* ── 탭 ── */
+.tabs {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.4rem;
+}
+
+.tabBtn {
+  flex: 1;
+  padding: 0.6rem 1rem;
+  border: none;
+  border-radius: 1.25rem;
+  background: transparent;
+  color: var(--text-sub);
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, transform 0.1s;
+  letter-spacing: -0.01em;
+}
+
+.tabBtn:hover:not(:disabled) {
+  background: rgba(99, 102, 241, 0.08);
+  color: var(--blue);
+}
+
+.tabBtn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.tabActive {
+  background: linear-gradient(135deg, var(--blue), #818cf8) !important;
+  color: #fff !important;
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.35);
+}
+
+/* ── 플래시카드 ── */
+.cardWrap {
+  perspective: 1000px;
+}
+
+.card {
+  position: relative;
+  height: 220px;
+  cursor: pointer;
+  user-select: none;
+  transform-style: preserve-3d;
+  transition: transform 0.55s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.card.flipped {
+  transform: rotateY(180deg);
+}
+
+.cardFace {
+  position: absolute;
+  inset: 0;
+  border-radius: 1.75rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  padding: 1.5rem;
+}
+
+.cardFront {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.8) 0%, rgba(230, 235, 255, 0.7) 100%);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  border: 1.5px solid rgba(255, 255, 255, 0.9);
+  box-shadow: var(--shadow), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  gap: 0.6rem;
+}
+
+.cardBack {
+  background: linear-gradient(145deg, rgba(99, 102, 241, 0.12) 0%, rgba(168, 139, 250, 0.15) 100%);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  border: 1.5px solid rgba(99, 102, 241, 0.25);
+  box-shadow: 0 8px 32px rgba(99, 102, 241, 0.18);
+  transform: rotateY(180deg);
+  gap: 0.5rem;
+}
+
+.wordText {
+  font-size: 2.6rem;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: -0.04em;
+}
+
+.speakBtn {
+  font-size: 1.1rem;
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: 0.6rem;
+  padding: 0.2rem 0.6rem;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+  line-height: 1;
+}
+
+.speakBtn:hover {
+  background: rgba(99, 102, 241, 0.2);
+  transform: scale(1.1);
+}
+
+.meaningText {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--blue);
+  text-align: center;
+  line-height: 1.6;
+}
+
+/* ── 진행 표시 ── */
+.progressRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.9rem 1.25rem;
+}
+
+.progressBar {
+  flex: 1;
+  height: 6px;
+  background: rgba(99, 102, 241, 0.12);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--blue), #a78bfa);
+  border-radius: 3px;
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.progressText {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-sub);
+  white-space: nowrap;
+}
+
+/* ── 힌트 ── */
+.hint {
+  font-size: 0.78rem;
+  color: var(--text-sub);
+  text-align: center;
+  padding: 0.5rem 1.25rem;
+}
+
+/* ── 이전/다음 내비게이션 ── */
+.nav {
+  display: flex;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+}
+
+.navBtn {
+  flex: 1;
+  padding: 0.8rem;
+  border-radius: 1.25rem;
+  border: 1.5px solid rgba(99, 102, 241, 0.2);
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--blue);
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, opacity 0.2s;
+  letter-spacing: -0.01em;
+}
+
+.navBtn:hover:not(:disabled) {
+  background: rgba(99, 102, 241, 0.1);
+  border-color: var(--blue);
+}
+
+.navBtn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* ── 빈 상태 ── */
+.empty {
+  padding: 3rem 1.5rem;
+  text-align: center;
+  color: var(--text-sub);
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+/* ════════════════════════════════════════
+   퀴즈 스타일
+   ════════════════════════════════════════ */
+.quiz {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  width: 100%;
+}
+
+/* 퀴즈 문제 카드 */
+.quizQuestion {
+  padding: 2rem 1.5rem;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.quizWord {
+  font-size: 2.4rem;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: -0.04em;
+}
+
+.quizHint {
+  font-size: 0.85rem;
+  color: var(--text-sub);
+  font-weight: 500;
+}
+
+/* 선택지 그리드 */
+.quizOptions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.7rem;
+}
+
+.quizOption {
+  padding: 1rem 0.75rem;
+  border-radius: 1.25rem;
+  border: 1.5px solid rgba(99, 102, 241, 0.18);
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  text-align: center;
+  line-height: 1.4;
+}
+
+.quizOption:hover:not(:disabled) {
+  border-color: var(--blue);
+  background: rgba(99, 102, 241, 0.08);
+}
+
+.quizOption:disabled {
+  cursor: default;
+}
+
+.optCorrect {
+  border-color: var(--mint) !important;
+  background: rgba(16, 185, 129, 0.12) !important;
+  color: #065f46 !important;
+}
+
+.optWrong {
+  border-color: #ef4444 !important;
+  background: rgba(239, 68, 68, 0.1) !important;
+  color: #7f1d1d !important;
+}
+
+.optDim {
+  opacity: 0.3;
+}
+
+/* 오답 피드백 */
+.wrongFeedback {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1.2rem 1.5rem;
+  font-size: 0.95rem;
+  color: var(--text-sub);
+  font-weight: 500;
+}
+
+.wrongFeedback strong {
+  color: var(--mint);
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+
+.nextBtn {
+  padding: 0.65rem 2.2rem;
+  border-radius: 1rem;
+  border: none;
+  background: linear-gradient(135deg, var(--blue), #818cf8);
+  color: #fff;
+  font-family: var(--font);
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.3);
+  transition: opacity 0.2s;
+}
+
+.nextBtn:hover {
+  opacity: 0.88;
+}
+
+/* 결과 화면 */
+.quizResult {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 2.5rem 1.5rem;
+  text-align: center;
+}
+
+.resultEmoji {
+  font-size: 4rem;
+  line-height: 1;
+}
+
+.resultTitle {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: -0.03em;
+}
+
+.resultScore {
+  font-size: 3.5rem;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.resultCorrect {
+  color: var(--mint);
+}
+
+.resultTotal {
+  color: var(--text-sub);
+  font-weight: 500;
+  font-size: 2.2rem;
+}
+
+.resultPct {
+  font-size: 1rem;
+  color: var(--text-sub);
+  font-weight: 600;
+}
+
+.retryBtn {
+  margin-top: 0.5rem;
+  padding: 0.8rem 2.5rem;
+  border-radius: 1.25rem;
+  border: none;
+  background: linear-gradient(135deg, var(--blue), #818cf8);
+  color: #fff;
+  font-family: var(--font);
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(99, 102, 241, 0.4);
+  transition: opacity 0.2s, transform 0.1s;
+}
+
+.retryBtn:hover {
+  opacity: 0.88;
+}
