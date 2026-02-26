@@ -41,7 +41,9 @@ export default function StudyClient({ initialWords, initialMaxSet }: Props) {
     const [tab, setTab] = useState<Tab>('study')
     const [level, setLevel] = useState<Level>('elem_low')
     const [setNo, setSetNo] = useState<number>(1)
-    const [maxSet, setMaxSet] = useState<number>(initialMaxSet)
+    const [availableSets, setAvailableSets] = useState<number[]>(
+        Array.from({ length: initialMaxSet }, (_, i) => i + 1)
+    )
     const [words, setWords] = useState<Word[]>(initialWords)
     const [currentIndex, setCurrentIndex] = useState(0)
     const [isFlipped, setIsFlipped] = useState(false)
@@ -70,14 +72,34 @@ export default function StudyClient({ initialWords, initialMaxSet }: Props) {
     async function changeLevel(newLevel: Level) {
         setLevel(newLevel)
         startTransition(async () => {
-            const [maxResult, wordsResult] = await Promise.all([
-                supabase.from('words').select('set_no').eq('level', newLevel)
-                    .order('set_no', { ascending: false }).limit(1).single(),
-                supabase.from('words').select('*').eq('level', newLevel).eq('set_no', 1).order('id'),
-            ])
-            setMaxSet(maxResult.data?.set_no ?? 1)
-            setSetNo(1)
-            setWords((wordsResult.data ?? []) as Word[])
+            // 해당 레벨의 모든 세트 번호를 가져옵니다.
+            const { data: rangeData } = await supabase
+                .from('words')
+                .select('set_no')
+                .eq('level', newLevel)
+                .order('set_no', { ascending: true })
+
+            if (!rangeData || rangeData.length === 0) {
+                setAvailableSets([1])
+                setSetNo(1)
+                setWords([])
+                return
+            }
+
+            const uniqueSets = Array.from(new Set(rangeData.map(d => d.set_no)))
+            const minSetNo = uniqueSets[0]
+
+            // 해당 레벨의 첫 번째 유효 세트 데이터를 가져옵니다.
+            const { data: wordsResult } = await supabase
+                .from('words')
+                .select('*')
+                .eq('level', newLevel)
+                .eq('set_no', minSetNo)
+                .order('id')
+
+            setAvailableSets(uniqueSets)
+            setSetNo(minSetNo)
+            setWords((wordsResult ?? []) as Word[])
             prevIndexRef.current = -1
             setCurrentIndex(0)
             setIsFlipped(false)
@@ -116,7 +138,7 @@ export default function StudyClient({ initialWords, initialMaxSet }: Props) {
                         {LEVELS.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
                     </select>
                     <select value={setNo} onChange={e => changeSet(Number(e.target.value))} disabled={isPending}>
-                        {Array.from({ length: maxSet }, (_, i) => i + 1).map(n => (
+                        {availableSets.map(n => (
                             <option key={n} value={n}>Set {n}</option>
                         ))}
                     </select>
