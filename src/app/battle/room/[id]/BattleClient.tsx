@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence, type Transition } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
 import type { Word } from '@/types/vocabulary'
 import styles from '../room.module.css'
+import confetti from 'canvas-confetti'
 
 interface RoomData {
     id: string
@@ -21,7 +22,7 @@ interface Props {
     myId: string
 }
 
-type QuizState = 'playing' | 'wrong' | 'finished'
+type QuizState = 'playing' | 'wrong' | 'finished' | 'countdown'
 
 interface QuizQuestion {
     word: Word
@@ -29,9 +30,7 @@ interface QuizQuestion {
     correct: string
 }
 
-// 두 유저에게 정확히 동일한 문제 순서와 선택지를 제공하기 위한 결정적(Deterministic) 퀴즈 생성
 function buildDeterministicQuiz(words: Word[]): QuizQuestion[] {
-    // ID 순서대로 정렬 (문제 순서 일치)
     const sortedWords = [...words].sort((a, b) => a.id - b.id)
     const allMeanings = sortedWords.map(w => w.mean_1)
 
@@ -40,16 +39,15 @@ function buildDeterministicQuiz(words: Word[]): QuizQuestion[] {
         const w1 = allMeanings[(i + 1) % allMeanings.length]
         const w2 = allMeanings[(i + 2) % allMeanings.length]
         const w3 = allMeanings[(i + 3) % allMeanings.length]
-
+        
         let wrongs = Array.from(new Set([w1, w2, w3])).filter(m => m !== correct)
-        while (wrongs.length < 3) wrongs.push(`(오답 ${Math.random()})`)
+        while(wrongs.length < 3) wrongs.push(`(오답 ${Math.random().toString().slice(2, 5)})`)
         wrongs = wrongs.slice(0, 3)
 
-        // 보기 순서도 결정적으로 (알파벳 정렬 등 하면 너무 뻔해지므로 간단한 해시처럼 길이로 정렬)
         const options = [correct, ...wrongs].sort((a, b) => {
             const sumA = a.length + (a.charCodeAt(0) || 0)
             const sumB = b.length + (b.charCodeAt(0) || 0)
-            return (sumA % 5) - (sumB % 5) // 대략적인 pseudo-random 섞기
+            return (sumA % 5) - (sumB % 5)
         })
 
         return { word, options, correct }
@@ -79,9 +77,13 @@ export default function BattleClient({ room, myId }: Props) {
     const [myScore, setMyScore] = useState(0)
     const [opponentScore, setOpponentScore] = useState(0)
     const [selected, setSelected] = useState<string | null>(null)
-    const [quizState, setQuizState] = useState<QuizState>('playing')
+    const [quizState, setQuizState] = useState<QuizState>('countdown')
+    const [countdownNum, setCountdownNum] = useState<number | string>(3)
 
-    // 1. 단어 데이터 페칭 및 퀴즈 빌드
+    const isHost = room.host_id === myId
+    const opponentId = isHost ? room.guest_id : room.host_id
+
+    // 1. 데이터 로드
     useEffect(() => {
         async function fetchWords() {
             const { data } = await supabase
@@ -89,7 +91,7 @@ export default function BattleClient({ room, myId }: Props) {
                 .select('*')
                 .eq('level', room.level)
                 .eq('set_no', room.set_no)
-
+            
             if (data && data.length > 0) {
                 setWords(data as Word[])
                 setQuiz(buildDeterministicQuiz(data as Word[]))
@@ -99,10 +101,32 @@ export default function BattleClient({ room, myId }: Props) {
         fetchWords()
     }, [room, supabase])
 
-    // 2. Supabase Broadcast 설정 (실시간 점수 동기화)
+    // 2. 카운트다운 로직
+    useEffect(() => {
+        if (isLoading) return
+        
+        let timer: NodeJS.Timeout
+        if (typeof countdownNum === 'number') {
+            timer = setTimeout(() => {
+                if (countdownNum > 1) {
+                    setCountdownNum(countdownNum - 1)
+                } else {
+                    setCountdownNum('GO!')
+                }
+            }, 1000)
+        } else if (countdownNum === 'GO!') {
+            timer = setTimeout(() => {
+                setQuizState('playing')
+                setCountdownNum('')
+            }, 800)
+        }
+        
+        return () => clearTimeout(timer)
+    }, [countdownNum, isLoading])
+
+    // 3. Broadcast 구독
     useEffect(() => {
         const channel = supabase.channel(`battle:${room.id}`)
-
         channel
             .on('broadcast', { event: 'score_update' }, (payload) => {
                 if (payload.payload.userId !== myId) {
@@ -116,11 +140,12 @@ export default function BattleClient({ room, myId }: Props) {
 
     // 자동 발음
     useEffect(() => {
+        if (quizState !== 'playing') return
         const word = quiz[index]?.word.word
         if (!word) return
-        const timer = setTimeout(() => speak(word), 700)
+        const timer = setTimeout(() => speak(word), 500)
         return () => clearTimeout(timer)
-    }, [index, quiz])
+    }, [index, quiz, quizState])
 
     const broadcastScore = useCallback(async (newScore: number) => {
         await supabase.channel(`battle:${room.id}`).send({
@@ -130,95 +155,157 @@ export default function BattleClient({ room, myId }: Props) {
         })
     }, [room.id, myId, supabase])
 
-    if (isLoading) return <div className={styles.loader}>퀴즈 불러오는 중...</div>
-    if (quiz.length === 0) return <div className={styles.errorText}>단어 데이터가 없습니다.</div>
+    // 결과 효과
+    useEffect(() => {
+        if (quizState === 'finished') {
+            if (myScore > opponentScore) {
+                confetti({
+                    particleCount: 150,
+                    spread: 70,
+                    origin: { y: 0.6 },
+                    colors: ['#6366f1', '#a5b4fc', '#f9a8d4']
+                })
+            }
+        }
+    }, [quizState, myScore, opponentScore])
+
+    if (isLoading) return <div className={styles.loader}>영단어 전쟁 준비 중...</div>
+    if (quiz.length === 0) return <div className={styles.errorText}>데이터가 없습니다.</div>
 
     const current = quiz[index]
-    const isHost = room.host_id === myId
-    const opponentName = isHost ? "참가자" : "방장"
+    const total = quiz.length
+
+    // 중앙 지향 계산
+    // Host(Blue)는 왼쪽에서 50%까지, Guest(Green)는 오른쪽에서 50%까지
+    const hostScore = isHost ? myScore : opponentScore
+    const guestScore = isHost ? opponentScore : myScore
+    
+    const hostPos = (hostScore / total) * 45 // 45% 정도만 이동 (중앙선 부근까지)
+    const guestPos = (guestScore / total) * 45
 
     function handleSelect(option: string) {
-        if (selected !== null) return
+        if (selected !== null || quizState !== 'playing') return
         setSelected(option)
 
         if (option === current.correct) {
             const nextScore = myScore + 1
             setMyScore(nextScore)
-            broadcastScore(nextScore) // 상대방에게 점수 전송
+            broadcastScore(nextScore)
 
             setTimeout(() => {
-                if (index + 1 >= quiz.length) { setQuizState('finished') }
-                else { setIndex(i => i + 1); setSelected(null); setQuizState('playing') }
-            }, 650)
+                if (index + 1 >= total) { setQuizState('finished') }
+                else { setIndex(i => i + 1); setSelected(null) }
+            }, 600)
         } else {
             setQuizState('wrong')
-            // 틀림 (상대방도 내가 틀린 걸 알 필요가 있다면 broadcast 가능하지만, 현재는 내 점수만)
         }
     }
 
     function handleNext() {
-        if (index + 1 >= quiz.length) setQuizState('finished')
+        if (index + 1 >= total) setQuizState('finished')
         else { setIndex(i => i + 1); setSelected(null); setQuizState('playing') }
     }
 
-    // 결과 화면
     if (quizState === 'finished') {
         const isWin = myScore > opponentScore
         const isTie = myScore === opponentScore
         return (
-            <motion.div className={styles.card} initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <motion.div 
+                className={`${styles.card} ${styles.winnerCard}`} 
+                initial={{ opacity: 0, scale: 0.8 }} 
+                animate={{ opacity: 1, scale: 1 }}
+                transition={spring}
+            >
+                <div className={styles.resultEmoji}>{isTie ? '🤝' : (isWin ? '🏆' : '🥲')}</div>
                 <h2 className={styles.title}>
-                    {isTie ? '무승부! 🤝' : (isWin ? '승리! 🏆' : '패배... 🥲')}
+                    {isTie ? '무승부!' : (isWin ? '승리!' : '패배...')}
                 </h2>
                 <div className={styles.playerContainer}>
                     <div className={styles.playerCard}>
-                        <p className={styles.label}>나의 점수</p>
+                        <p className={styles.label}>나</p>
                         <h1 className={styles.roomCode}>{myScore}</h1>
                     </div>
                     <div className={styles.vs}>VS</div>
                     <div className={styles.playerCard}>
-                        <p className={styles.label}>상대방 점수</p>
+                        <p className={styles.label}>상대방</p>
                         <h1 className={styles.roomCode}>{opponentScore}</h1>
                     </div>
                 </div>
+                <button className={styles.btnPrimary} style={{ marginTop: '2rem' }} onClick={() => window.location.href = '/study'}>
+                    돌아가기
+                </button>
             </motion.div>
         )
     }
 
-    const myProgress = (myScore / quiz.length) * 100
-    const opponentProgress = (opponentScore / quiz.length) * 100
-
     return (
         <div className={styles.battleWrap}>
-            {/* 상단 스코어보드 바 */}
+            {/* 카운트다운 오버레이 */}
+            <AnimatePresence>
+                {countdownNum !== '' && (
+                    <motion.div 
+                        className={styles.countdownOverlay}
+                        initial={{ opacity: 0, scale: 1.5 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.5 }}
+                        transition={{ duration: 0.3 }}
+                    >
+                        <motion.span 
+                            key={countdownNum}
+                            className={`${styles.countdownNumber} ${countdownNum === 'GO!' ? styles.countdownGo : ''}`}
+                            initial={{ y: 20, opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
+                        >
+                            {countdownNum}
+                        </motion.span>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* 상단 대결 바 (Center-Towing) */}
             <div className={styles.scoreboard}>
-                <div className={styles.scoreRow}>
-                    <span className={styles.scoreName}>나</span>
-                    <div className={styles.progressBar}>
-                        <motion.div className={styles.progressFill} animate={{ width: `${myProgress}%` }} />
-                    </div>
-                    <span className={styles.scoreVal}>{myScore}</span>
+                <div className={styles.trackWrapper}>
+                    <div className={styles.centerLine} />
+                    
+                    {/* 방장 (Host) - 왼쪽에서 시작 */}
+                    <motion.div 
+                        className={`${styles.pawn} ${styles.pawnHost}`}
+                        animate={{ left: `calc(${hostPos}% + 4px)` }}
+                        transition={{ type: 'spring', damping: 20 }}
+                    >
+                        <span>👑</span>
+                        <div className={styles.labelTag}>{isHost ? '나' : '상대'}</div>
+                    </motion.div>
+
+                    {/* 참가자 (Guest) - 오른쪽에서 시작 */}
+                    <motion.div 
+                        className={`${styles.pawn} ${styles.pawnGuest}`}
+                        animate={{ right: `calc(${guestPos}% + 4px)` }}
+                        transition={{ type: 'spring', damping: 20 }}
+                    >
+                        <span>😎</span>
+                        <div className={styles.labelTag}>{!isHost ? '나' : '상대'}</div>
+                    </motion.div>
                 </div>
-                <div className={styles.scoreRow}>
-                    <span className={styles.scoreName}>{opponentName}</span>
-                    <div className={styles.progressBar}>
-                        <motion.div className={styles.progressFillOpponent} animate={{ width: `${opponentProgress}%` }} />
-                    </div>
-                    <span className={styles.scoreVal}>{opponentScore}</span>
+                
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 10px', marginTop: '10px' }}>
+                    <span style={{ fontWeight: 800, color: '#4338ca' }}>{isHost ? myScore : opponentScore} pt</span>
+                    <span style={{ fontWeight: 800, color: '#059669' }}>{isHost ? opponentScore : myScore} pt</span>
                 </div>
             </div>
 
-            {/* 카드 퀴즈 영역 (QuizClient와 유사) */}
+            {/* 퀴즈 영역 */}
             <div className={styles.card}>
                 <AnimatePresence mode="wait">
                     <motion.div
                         key={index}
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 1.05 }}
+                        initial={{ opacity: 0, x: 50 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -50 }}
                         transition={spring}
                         className={styles.questionArea}
                     >
+                        <p className={styles.label} style={{ marginBottom: '1rem' }}>Q. 다음 단어의 뜻은?</p>
                         <h2 className={styles.questionWord}>{current.word.word}</h2>
                     </motion.div>
                 </AnimatePresence>
@@ -236,8 +323,8 @@ export default function BattleClient({ room, myId }: Props) {
                                 key={i}
                                 className={cls}
                                 onClick={() => handleSelect(opt)}
-                                disabled={selected !== null}
-                                whileTap={selected === null ? { scale: 0.95 } : {}}
+                                disabled={selected !== null || quizState !== 'playing'}
+                                whileTap={{ scale: 0.95 }}
                             >
                                 {opt}
                             </motion.button>
@@ -249,12 +336,12 @@ export default function BattleClient({ room, myId }: Props) {
                     {quizState === 'wrong' && (
                         <motion.div
                             className={styles.wrongFeedback}
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: 'auto' }}
-                            exit={{ opacity: 0, height: 0 }}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0 }}
                         >
-                            <p>정답: <strong>{current.correct}</strong></p>
-                            <button className={styles.btnSecondary} onClick={handleNext}>다음 →</button>
+                            <p>정답은 <strong>{current.correct}</strong> 입니다.</p>
+                            <button className={styles.btnSecondary} style={{ marginTop: '1rem' }} onClick={handleNext}>다음 문제 →</button>
                         </motion.div>
                     )}
                 </AnimatePresence>
