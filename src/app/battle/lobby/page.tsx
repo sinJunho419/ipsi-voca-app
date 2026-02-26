@@ -140,13 +140,25 @@ function LobbyContent() {
                 </header>
 
                 {errorMsg && (
-                    <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        className={styles.error}
-                    >
-                        {errorMsg}
-                    </motion.div>
+                    <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+                        <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            className={styles.error}
+                            style={{ marginBottom: '0.5rem' }}
+                        >
+                            {errorMsg}
+                        </motion.div>
+                        {errorMsg.includes('로그인') && (
+                            <button
+                                className={styles.backBtn}
+                                style={{ color: '#6366f1', textDecoration: 'underline', fontSize: '1rem' }}
+                                onClick={() => router.push('/api/test-sso')}
+                            >
+                                ⚡ 테스트용 계정으로 자동 로그인
+                            </button>
+                        )}
+                    </div>
                 )}
 
                 <div className={styles.section}>
