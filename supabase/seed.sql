@@ -196,3 +196,38 @@ ALTER TABLE public.study_logs ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "study_logs_own" ON public.study_logs
   FOR ALL USING (auth.uid() = user_id);
 
+-- ----------------------------------------------------------
+-- 6. battle_rooms 테이블 (실시간 배틀 로비 및 게임 상태 관리)
+-- ----------------------------------------------------------
+CREATE TABLE public.battle_rooms (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  room_code varchar(6) NOT NULL UNIQUE,
+  host_id uuid REFERENCES auth.users(id) NOT NULL,
+  guest_id uuid REFERENCES auth.users(id),
+  status varchar(20) NOT NULL DEFAULT 'waiting', -- waiting, playing, finished
+  level varchar(50) NOT NULL,
+  set_no integer NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- RLS 활성화
+ALTER TABLE public.battle_rooms ENABLE ROW LEVEL SECURITY;
+
+-- 누구나 방을 조회할 수 있음 (코드로 진입하기 위함)
+CREATE POLICY "Anyone can view battle rooms" ON public.battle_rooms
+  FOR SELECT USING (true);
+
+-- 인증된 사용자만 방을 생성할 수 있음
+CREATE POLICY "Authenticated users can create rooms" ON public.battle_rooms
+  FOR INSERT WITH CHECK (auth.uid() = host_id);
+
+-- 방장과 게스트만 방 상태를 업데이트할 수 있음
+CREATE POLICY "Participants can update room" ON public.battle_rooms
+  FOR UPDATE USING (auth.uid() = host_id OR auth.uid() = guest_id);
+
+-- updated_at 자동 갱신을 위한 Trigger 재생성 또는 연결 (Postgres 확장 기능 moddatetime 사용 시 생략 가능, 여기선 단순 처리)
+DROP TRIGGER IF EXISTS handle_battle_rooms_updated_at ON public.battle_rooms;
+-- (moddatetime 익스텐션이 필요하다면 아래 주석 해제하여 사용)
+-- CREATE TRIGGER handle_battle_rooms_updated_at BEFORE UPDATE ON public.battle_rooms
+--   FOR EACH ROW EXECUTE PROCEDURE moddatetime (updated_at);

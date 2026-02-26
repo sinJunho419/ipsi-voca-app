@@ -1,0 +1,238 @@
+/* ════════════════════════════════════════
+   배틀 로비 (방 생성 / 참가) - Glassmorphism UI
+   ════════════════════════════════════════ */
+
+.page {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #e0e7ff 0%, #fce7f3 50%, #d1fae5 100%);
+    overflow: hidden;
+    padding: 1rem;
+}
+
+/* ── 애니메이션 배경 ── */
+.blob1,
+.blob2 {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.5;
+    pointer-events: none;
+    animation: blobFloat 10s ease-in-out infinite alternate;
+}
+
+.blob1 {
+    width: 400px;
+    height: 400px;
+    background: radial-gradient(circle, #a5b4fc, #818cf8);
+    top: -100px;
+    left: -100px;
+}
+
+.blob2 {
+    width: 350px;
+    height: 350px;
+    background: radial-gradient(circle, #f9a8d4, #ec4899);
+    bottom: -50px;
+    right: -50px;
+    animation-duration: 12s;
+    animation-direction: alternate-reverse;
+}
+
+@keyframes blobFloat {
+    0% {
+        transform: translate(0, 0) scale(1);
+    }
+
+    50% {
+        transform: translate(40px, -20px) scale(1.05);
+    }
+
+    100% {
+        transform: translate(-20px, 30px) scale(0.95);
+    }
+}
+
+/* ── 글래스 카드 ── */
+.card {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 400px;
+    background: rgba(255, 255, 255, 0.45);
+    backdrop-filter: blur(28px);
+    -webkit-backdrop-filter: blur(28px);
+    border: 1.5px solid rgba(255, 255, 255, 0.75);
+    border-radius: 2rem;
+    box-shadow: 0 12px 48px rgba(99, 102, 241, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    padding: 2.5rem 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.header {
+    text-align: center;
+}
+
+.title {
+    font-size: 1.7rem;
+    font-weight: 800;
+    color: #1e1b4b;
+    margin: 0;
+    letter-spacing: -0.03em;
+}
+
+.subtitle {
+    font-size: 0.9rem;
+    color: #6366f1;
+    margin-top: 0.4rem;
+    font-weight: 600;
+}
+
+/* ── 액션 섹션 ── */
+.section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+    align-items: center;
+}
+
+.sectionTitle {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #3730a3;
+    margin-bottom: 0.2rem;
+}
+
+.btnPrimary {
+    width: 100%;
+    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+    color: white;
+    border: none;
+    border-radius: 1rem;
+    padding: 1rem;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 8px 20px rgba(99, 102, 241, 0.3);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.btnPrimary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 24px rgba(99, 102, 241, 0.4);
+}
+
+.btnPrimary:disabled {
+    background: #9ca3af;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.divider {
+    display: flex;
+    align-items: center;
+    text-align: center;
+    color: #6366f1;
+    font-weight: 600;
+    font-size: 0.85rem;
+    opacity: 0.8;
+}
+
+.divider::before,
+.divider::after {
+    content: '';
+    flex: 1;
+    border-bottom: 1.5px dashed rgba(99, 102, 241, 0.3);
+    margin: 0 1rem;
+}
+
+/* ── 조인 폼 ── */
+.joinForm {
+    display: flex;
+    gap: 0.5rem;
+    width: 100%;
+}
+
+.codeInput {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.7);
+    border: 1.5px solid rgba(99, 102, 241, 0.3);
+    border-radius: 1rem;
+    padding: 0 1rem;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #1e1b4b;
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    outline: none;
+    transition: border-color 0.2s, background 0.2s;
+}
+
+.codeInput:focus {
+    border-color: #6366f1;
+    background: rgba(255, 255, 255, 0.9);
+}
+
+.codeInput::placeholder {
+    color: #94a3b8;
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: normal;
+}
+
+.btnSecondary {
+    background: #10b981;
+    color: white;
+    border: none;
+    border-radius: 1rem;
+    padding: 0 1.2rem;
+    font-size: 0.95rem;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+    transition: transform 0.2s, background 0.2s;
+}
+
+.btnSecondary:hover {
+    background: #059669;
+    transform: translateY(-2px);
+}
+
+.btnSecondary:disabled {
+    background: #9ca3b8;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.error {
+    color: #ef4444;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-align: center;
+    margin-top: -0.5rem;
+}
+
+.backBtn {
+    background: none;
+    border: none;
+    color: #64748b;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0.5rem;
+    margin-top: -1rem;
+    text-decoration: underline;
+    text-decoration-color: transparent;
+    transition: text-decoration-color 0.2s;
+}
+
+.backBtn:hover {
+    text-decoration-color: #64748b;
+}

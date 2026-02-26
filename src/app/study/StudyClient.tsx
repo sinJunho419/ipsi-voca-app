@@ -5,6 +5,7 @@ import { motion, AnimatePresence, type Transition } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
 import type { Word, Level } from '@/types/vocabulary'
 import styles from './study.module.css'
+import { useRouter } from 'next/navigation'
 import QuizClient from './QuizClient'
 
 const LEVELS: { value: Level; label: string }[] = [
@@ -36,6 +37,7 @@ const spring: Transition = { type: 'spring', stiffness: 420, damping: 30 }
 
 export default function StudyClient({ initialWords, initialMaxSet }: Props) {
     const supabase = createClient()
+    const router = useRouter()
 
     const [tab, setTab] = useState<Tab>('study')
     const [level, setLevel] = useState<Level>('elem_low')
@@ -119,6 +121,14 @@ export default function StudyClient({ initialWords, initialMaxSet }: Props) {
                             <option key={n} value={n}>Set {n}</option>
                         ))}
                     </select>
+
+                    {/* 배틀 진입 버튼 */}
+                    <button
+                        className={styles.battleBtn}
+                        onClick={() => router.push(`/battle/lobby?level=${level}&setNo=${setNo}`)}
+                    >
+                        🏆 배틀 참여하기
+                    </button>
                 </motion.div>
 
                 {/* 탭 박스 */}
