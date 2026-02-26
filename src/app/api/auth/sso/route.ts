@@ -46,15 +46,17 @@ export async function GET(request: NextRequest) {
     }
 
     // ── 2. HMAC 서명 검증 ─────────────────────────────────────────────
-    const secret = process.env.AUTH_HMAC_SECRET
+    const secret = process.env.AUTH_HMAC_SECRET?.trim()
     if (!secret) {
-        console.error('AUTH_HMAC_SECRET is not set')
-        return new NextResponse('Server configuration error', { status: 500 })
+        console.error('AUTH_HMAC_SECRET is not set');
+        return new NextResponse('Server configuration error: AUTH_HMAC_SECRET missing', { status: 500 })
     }
 
     if (!verifyHmac(secret, userId, ts, token)) {
-        console.error(`Invalid SSO Signature: user_id=${userId}, ts=${ts}, token=${token}`);
-        return new NextResponse('Invalid token signature (HMAC mismatch)', { status: 401 })
+        const message = userId + ts;
+        const expected = crypto.createHmac('sha256', secret).update(message).digest('hex');
+        console.error(`HMAC Mismatch! \nMsg: ${message}\nExpected: ${expected}\nReceived: ${token}`);
+        return new NextResponse(`Invalid signature. Debug: msg=${message}`, { status: 401 })
     }
 
     // ── 3. 타임스탬프 유효성 (5분 이내) ──────────────────────────────

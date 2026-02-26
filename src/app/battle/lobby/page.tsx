@@ -151,11 +151,14 @@ function LobbyContent() {
                         </motion.div>
                         {errorMsg.includes('로그인') && (
                             <button
-                                className={styles.backBtn}
-                                style={{ color: '#6366f1', textDecoration: 'underline', fontSize: '1rem' }}
-                                onClick={() => router.push('/api/test-sso')}
+                                className={styles.btnPrimary}
+                                style={{ marginTop: '0.5rem', fontSize: '0.9rem', padding: '0.8rem' }}
+                                onClick={() => {
+                                    setErrorMsg('로그인 시도 중...');
+                                    window.location.href = '/api/test-sso';
+                                }}
                             >
-                                ⚡ 테스트용 계정으로 자동 로그인
+                                ⚡ 테스트 계정으로 자동 로그인
                             </button>
                         )}
                     </div>

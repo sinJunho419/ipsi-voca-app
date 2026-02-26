@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = request.nextUrl
     const userId = searchParams.get('user_id') || 'test_user_999'
 
-    const secret = process.env.AUTH_HMAC_SECRET
+    const secret = process.env.AUTH_HMAC_SECRET?.trim()
     if (!secret) {
         return new NextResponse('Vercel에 AUTH_HMAC_SECRET 환경변수가 설정되지 않았습니다.', { status: 500 })
     }
