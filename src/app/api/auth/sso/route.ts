@@ -9,17 +9,18 @@ const FIVE_MINUTES = 5 * 60 // seconds
  * message = user_id + ts
  */
 function verifyHmac(secret: string, userId: string, ts: string, token: string): boolean {
-    const message = userId + ts
-    const expected = crypto.createHmac('sha256', secret).update(message).digest('hex')
-    if (expected.length !== token.length) return false
-    try {
-        return crypto.timingSafeEqual(
-            Buffer.from(expected, 'utf8'),
-            Buffer.from(token, 'utf8')
-        )
-    } catch {
-        return false
+    // 새 포맷: 구분자 ':' 포함 (userId/ts 경계 충돌 방지)
+    // 하위호환: 기존 포맷(구분자 없음)도 시도
+    for (const message of [userId + ':' + ts, userId + ts]) {
+        const expected = crypto.createHmac('sha256', secret).update(message).digest('hex')
+        if (expected.length !== token.length) continue
+        try {
+            if (crypto.timingSafeEqual(Buffer.from(expected, 'utf8'), Buffer.from(token, 'utf8'))) {
+                return true
+            }
+        } catch { /* length mismatch */ }
     }
+    return false
 }
 
 /**
@@ -53,10 +54,8 @@ export async function GET(request: NextRequest) {
     }
 
     if (!verifyHmac(secret, userId, ts, token)) {
-        const message = userId + ts;
-        const expected = crypto.createHmac('sha256', secret).update(message).digest('hex');
-        console.error(`HMAC Mismatch! \nMsg: ${message}\nExpected: ${expected}\nReceived: ${token}`);
-        return new NextResponse(`Invalid signature. Debug: msg=${message}`, { status: 401 })
+        console.error('SSO HMAC verification failed for user_id:', userId)
+        return new NextResponse('Invalid signature', { status: 401 })
     }
 
     // ── 3. 타임스탬프 유효성 (5분 이내) ──────────────────────────────

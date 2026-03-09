@@ -1,26 +1,16 @@
-import { NextRequest, NextResponse } from 'next/server'
-import crypto from 'crypto'
+import { NextResponse } from 'next/server'
 
 /**
- * 테스트 전용 라우트
- * GET /api/test-sso?user_id=test1
- * -> 서버의 AUTH_HMAC_SECRET를 읽어 유효한 SSO URL을 생성하고 자동 리다이렉트합니다.
+ * 테스트 전용 라우트 — 프로덕션에서 비활성화
+ * 로컬 개발 시에만 사용: NODE_ENV=development
  */
-export async function GET(request: NextRequest) {
-    const { searchParams } = request.nextUrl
-    const userId = searchParams.get('user_id') || 'test_user_999'
-    const redirect = searchParams.get('redirect') || '/study'
-
-    const secret = process.env.AUTH_HMAC_SECRET?.trim()
-    if (!secret) {
-        return new NextResponse('Vercel에 AUTH_HMAC_SECRET 환경변수가 설정되지 않았습니다.', { status: 500 })
+export async function GET() {
+    if (process.env.NODE_ENV === 'production') {
+        return new NextResponse('Not found', { status: 404 })
     }
 
-    const ts = Math.floor(Date.now() / 1000).toString()
-    const payload = userId + ts
-    const token = crypto.createHmac('sha256', secret).update(payload).digest('hex')
-
-    // 생성한 유효한 SSO URL로 바로 리다이렉트! (redirect 파라미터로 로그인 후 이동할 경로 지정)
-    const ssoUrl = new URL(`/api/auth/sso?user_id=${userId}&ts=${ts}&token=${token}&redirect=${encodeURIComponent(redirect)}`, request.url)
-    return NextResponse.redirect(ssoUrl)
+    return new NextResponse(
+        'test-sso는 로컬 개발 환경에서만 사용 가능합니다. (NODE_ENV=development)',
+        { status: 403 }
+    )
 }

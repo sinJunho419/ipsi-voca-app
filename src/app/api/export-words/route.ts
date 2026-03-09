@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 const admin = createClient(
@@ -8,6 +9,14 @@ const admin = createClient(
 )
 
 export async function GET() {
+    // 인증 확인
+    const supabase = await createServerClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
+        return new NextResponse('로그인이 필요합니다.', { status: 401 })
+    }
+
     // 전체 단어 조회 (페이지네이션으로 전부 가져오기)
     const allWords: Record<string, unknown>[] = []
     const PAGE_SIZE = 1000
