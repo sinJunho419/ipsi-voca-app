@@ -91,12 +91,13 @@ export async function GET(request: NextRequest) {
 
     // ── 6. Magic Link 발급 (세션 쿠키 자동 설정) ────────────────────────
     const origin = `${request.nextUrl.protocol}//${request.nextUrl.host}`
+    const redirectPath = searchParams.get('redirect') || '/study'
 
     const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
         type: 'magiclink',
         email,
         options: {
-            redirectTo: `${origin}/auth/callback?next=/study`,
+            redirectTo: `${origin}/auth/callback?next=${encodeURIComponent(redirectPath)}`,
         },
     })
 

@@ -7,6 +7,9 @@ import type { Word, Level } from '@/types/vocabulary'
 import styles from './study.module.css'
 import { useRouter } from 'next/navigation'
 import QuizClient from './QuizClient'
+import MasterChallengeClient from './MasterChallengeClient'
+import WrongWordsClient from './WrongWordsClient'
+import BattleFeed from '@/components/BattleFeed'
 
 const LEVELS: { value: Level; label: string }[] = [
     { value: 'elem_3', label: '초등 3학년' },
@@ -16,7 +19,7 @@ const LEVELS: { value: Level; label: string }[] = [
     { value: 'high_1', label: '고등 1학년' },
 ]
 
-type Tab = 'study' | 'quiz'
+type Tab = 'study' | 'quiz' | 'wrong' | 'master'
 
 interface Props { initialWords: Word[]; initialMaxSet: number }
 
@@ -25,7 +28,7 @@ function speak(word: string) {
     window.speechSynthesis.cancel()
     const utter = new SpeechSynthesisUtterance(word)
     utter.lang = 'en-US'
-    utter.rate = 0.85
+    utter.rate = 0.7
     const usVoice = window.speechSynthesis.getVoices().find(v => v.lang === 'en-US')
     if (usVoice) utter.voice = usVoice
     window.speechSynthesis.speak(utter)
@@ -40,12 +43,49 @@ export default function StudyClient({ initialWords, initialMaxSet }: Props) {
     const router = useRouter()
 
     const [tab, setTab] = useState<Tab>('study')
-    const [level, setLevel] = useState<Level>('elem_3')
-    const [setNo, setSetNo] = useState<number>(1)
-    const [availableSets, setAvailableSets] = useState<number[]>(
-        Array.from({ length: initialMaxSet }, (_, i) => i + 1)
-    )
-    const [words, setWords] = useState<Word[]>(initialWords)
+    const [level, setLevel] = useState<Level | null>(null)
+    const [setNo, setSetNo] = useState<number | null>(null)
+    const [availableSets, setAvailableSets] = useState<number[]>([])
+    const [words, setWords] = useState<Word[]>([])
+    const isReady = level !== null && setNo !== null
+
+    // 성공 횟수 & 메달 (level+set 별 localStorage 저장)
+    const [successCount, setSuccessCount] = useState(0)
+    const [medalCount, setMedalCount] = useState(0)
+
+    const progressKey = level && setNo !== null ? `progress_${level}_${setNo}` : null
+
+    // level+set 변경 시 저장된 성공/메달 불러오기
+    useEffect(() => {
+        if (!progressKey) return
+        try {
+            const saved = JSON.parse(localStorage.getItem(progressKey) || '{}')
+            setSuccessCount(saved.success ?? 0)
+            setMedalCount(saved.medal ?? 0)
+        } catch { setSuccessCount(0); setMedalCount(0) }
+    }, [progressKey])
+
+    function saveProgress(success: number, medal: number) {
+        if (!progressKey) return
+        localStorage.setItem(progressKey, JSON.stringify({ success, medal }))
+    }
+
+    function handleQuizFinish(score: number, total: number) {
+        const pct = Math.round((score / total) * 100)
+        if (pct >= 90) {
+            const next = Math.min(successCount + 1, 3)
+            setSuccessCount(next)
+            saveProgress(next, medalCount)
+        }
+    }
+
+    function handleMasterSuccess() {
+        const nextMedal = medalCount + 1
+        setMedalCount(nextMedal)
+        setSuccessCount(0)
+        saveProgress(0, nextMedal)
+        setTab('study')
+    }
     const [currentIndex, setCurrentIndex] = useState(0)
     const [isFlipped, setIsFlipped] = useState(false)
     const [isPending, startTransition] = useTransition()
@@ -70,10 +110,12 @@ export default function StudyClient({ initialWords, initialMaxSet }: Props) {
         prevFlippedRef.current = isFlipped
     }, [isFlipped]) // eslint-disable-line react-hooks/exhaustive-deps
 
-    async function changeLevel(newLevel: Level) {
+    async function changeLevel(newLevel: Level | null) {
+        if (!newLevel) return
         setLevel(newLevel)
+        setSetNo(null)
+        setWords([])
         startTransition(async () => {
-            // 해당 레벨의 모든 세트 번호를 가져옵니다.
             const { data: rangeData } = await supabase
                 .from('words')
                 .select('set_no')
@@ -81,33 +123,18 @@ export default function StudyClient({ initialWords, initialMaxSet }: Props) {
                 .order('set_no', { ascending: true })
 
             if (!rangeData || rangeData.length === 0) {
-                setAvailableSets([1])
-                setSetNo(1)
-                setWords([])
+                setAvailableSets([])
                 return
             }
 
             const uniqueSets = Array.from(new Set(rangeData.map(d => d.set_no)))
-            const minSetNo = uniqueSets[0]
-
-            // 해당 레벨의 첫 번째 유효 세트 데이터를 가져옵니다.
-            const { data: wordsResult } = await supabase
-                .from('words')
-                .select('*')
-                .eq('level', newLevel)
-                .eq('set_no', minSetNo)
-                .order('id')
-
             setAvailableSets(uniqueSets)
-            setSetNo(minSetNo)
-            setWords((wordsResult ?? []) as Word[])
-            prevIndexRef.current = -1
-            setCurrentIndex(0)
-            setIsFlipped(false)
         })
     }
 
-    const changeSet = useCallback(async (newSetNo: number) => {
+    const changeSet = useCallback(async (val: string) => {
+        if (!val || !level) return
+        const newSetNo = Number(val)
         setSetNo(newSetNo)
         startTransition(async () => {
             const { data } = await supabase
@@ -125,61 +152,102 @@ export default function StudyClient({ initialWords, initialMaxSet }: Props) {
 
     return (
         <div className={styles.page}>
-            <header className={styles.header}>
-                <h1 className={styles.title}>📚 입시내비 보카</h1>
-                <p className={styles.subtitle}>초등부터 고등까지 영단어 마스터</p>
-            </header>
+            <BattleFeed />
             {/* 벤토 그리드 */}
             <div className={styles.bento}>
 
-                {/* 컨트롤 박스 */}
+                {/* 컨트롤 영역 (3줄 구조) */}
                 <motion.div
-                    className={`${styles.glass} ${styles.controls}`}
+                    className={`${styles.glass} ${styles.controlsWrap}`}
                     initial={{ opacity: 0, y: 16 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ ...spring, delay: 0.08 } as Transition}
                 >
-                    <select value={level} onChange={e => changeLevel(e.target.value as Level)} disabled={isPending}>
-                        {LEVELS.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
-                    </select>
-                    <select value={setNo} onChange={e => changeSet(Number(e.target.value))} disabled={isPending}>
-                        {availableSets.map(n => (
-                            <option key={n} value={n}>Set {n}</option>
-                        ))}
-                    </select>
+                    {/* 1줄: 학년 & 세트 선택 */}
+                    <div className={styles.selectRow}>
+                        <select value={level ?? ''} onChange={e => changeLevel((e.target.value || null) as Level | null)} disabled={isPending}>
+                            <option value="" disabled>학년을 선택하세요</option>
+                            {LEVELS.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
+                        </select>
+                        <select value={setNo ?? ''} onChange={e => changeSet(e.target.value)} disabled={isPending || !level}>
+                            <option value="" disabled>세트를 선택하세요</option>
+                            {availableSets.map(n => (
+                                <option key={n} value={n}>Set {n}</option>
+                            ))}
+                        </select>
+                    </div>
 
-                    {/* 배틀 진입 버튼 */}
-                    <button
-                        className={styles.battleBtn}
-                        onClick={() => router.push(`/battle/lobby?level=${level}&setNo=${setNo}`)}
-                    >
-                        🏆 배틀 참여하기
-                    </button>
-                </motion.div>
-
-                {/* 탭 박스 */}
-                <motion.div
-                    className={`${styles.glass} ${styles.tabs}`}
-                    initial={{ opacity: 0, y: 16 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ ...spring, delay: 0.14 } as Transition}
-                >
-                    {(['study', 'quiz'] as Tab[]).map(t => (
-                        <motion.button
-                            key={t}
-                            className={`${styles.tabBtn} ${tab === t ? styles.tabActive : ''}`}
-                            onClick={() => setTab(t)}
-                            disabled={t === 'quiz' && words.length === 0}
-                            whileTap={{ scale: 0.93 }}
-                            transition={spring}
+                    {/* 2줄: 주요 액션 버튼 */}
+                    <div className={styles.actionRow}>
+                        <button
+                            className={styles.battleBtn}
+                            onClick={() => router.push(`/battle/lobby${level ? `?level=${level}&setNo=${setNo}` : ''}`)}
                         >
-                            {t === 'study' ? '📖 학습하기' : '✏️ 테스트하기'}
-                        </motion.button>
-                    ))}
+                            🏆 배틀 참여하기
+                        </button>
+                        <button
+                            className={styles.reportBtn}
+                            onClick={() => router.push('/report')}
+                        >
+                            📊 주간 리포트
+                        </button>
+                    </div>
+
+                    {/* 성공 횟수 & 메달 */}
+                    {isReady && (
+                        <div className={styles.progressStatus}>
+                            <div className={styles.successDots}>
+                                <span className={styles.statusLabel}>테스트</span>
+                                {[0, 1, 2].map(i => (
+                                    <span key={i} className={`${styles.dot} ${i < successCount ? styles.dotFilled : ''}`} />
+                                ))}
+                                <span className={styles.successText}>{successCount}/3</span>
+                                {successCount >= 3 && (
+                                    <motion.button
+                                        className={styles.masterBtn}
+                                        onClick={() => setTab('master')}
+                                        whileTap={{ scale: 0.93 }}
+                                        initial={{ opacity: 0, scale: 0.8 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                    >
+                                        마스터 챌린지 도전!
+                                    </motion.button>
+                                )}
+                            </div>
+                            {medalCount > 0 && (
+                                <div className={styles.medalDisplay}>
+                                    <span className={styles.medalIcon}>🏅</span>
+                                    <span className={styles.medalCount}>{medalCount}</span>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* 탭 메뉴 (학년+세트 선택 후에만 표시) */}
+                    {isReady ? (
+                        <div className={styles.tabs}>
+                            {(['study', 'quiz', 'wrong'] as Tab[]).map(t => (
+                                <motion.button
+                                    key={t}
+                                    className={`${styles.tabBtn} ${tab === t ? styles.tabActive : ''}`}
+                                    onClick={() => setTab(t)}
+                                    disabled={t === 'quiz' && words.length === 0}
+                                    whileTap={{ scale: 0.93 }}
+                                    transition={spring}
+                                >
+                                    {t === 'study' ? '📖 학습' : t === 'quiz' ? '✏️ 테스트' : '📝 오답노트'}
+                                </motion.button>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className={styles.selectHint}>
+                            {!level ? '학년과 세트를 선택하세요' : '세트를 선택하세요'}
+                        </p>
+                    )}
                 </motion.div>
 
-                {/* 탭 콘텐츠 */}
-                <AnimatePresence mode="wait">
+                {/* 탭 콘텐츠 (학년+세트 선택 후에만 표시) */}
+                {isReady && <AnimatePresence mode="wait">
                     {tab === 'study' ? (
                         /* ── 학습 탭 ── */
                         isPending ? (
@@ -264,7 +332,7 @@ export default function StudyClient({ initialWords, initialMaxSet }: Props) {
                                 </div>
                             </motion.div>
                         )
-                    ) : (
+                    ) : tab === 'quiz' ? (
                         /* ── 퀴즈 탭 ── */
                         words.length < 4 ? (
                             <motion.div key="quiz-empty" {...fadeUp} className={`${styles.glass} ${styles.empty}`}>
@@ -272,11 +340,26 @@ export default function StudyClient({ initialWords, initialMaxSet }: Props) {
                             </motion.div>
                         ) : (
                             <motion.div key="quiz-content" {...fadeUp} transition={{ ...spring } as Transition}>
-                                <QuizClient key={`${level}-${setNo}`} words={words} />
+                                <QuizClient key={`${level}-${setNo}`} words={words} onExit={() => setTab('study')} onFinish={handleQuizFinish} />
                             </motion.div>
                         )
-                    )}
-                </AnimatePresence>
+                    ) : tab === 'wrong' ? (
+                        /* ── 오답노트 탭 ── */
+                        <motion.div key="wrong-content" {...fadeUp} transition={{ ...spring } as Transition}>
+                            <WrongWordsClient onExit={() => setTab('study')} />
+                        </motion.div>
+                    ) : tab === 'master' ? (
+                        /* ── 마스터 챌린지 탭 ── */
+                        <motion.div key="master-content" {...fadeUp} transition={{ ...spring } as Transition}>
+                            <MasterChallengeClient
+                                key={`master-${level}-${setNo}`}
+                                words={words}
+                                onSuccess={handleMasterSuccess}
+                                onExit={() => setTab('study')}
+                            />
+                        </motion.div>
+                    ) : null}
+                </AnimatePresence>}
             </div>
         </div>
     )

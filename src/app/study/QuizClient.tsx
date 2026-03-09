@@ -1,8 +1,11 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence, type Transition } from 'framer-motion'
+import { createClient } from '@/lib/supabase/client'
 import type { Word } from '@/types/vocabulary'
+import QuizTimerBar from './QuizTimerBar'
+import styles from './study.module.css'
 
 function speak(word: string) {
     if (typeof window === 'undefined' || !window.speechSynthesis) return
@@ -14,7 +17,6 @@ function speak(word: string) {
     if (usVoice) utter.voice = usVoice
     window.speechSynthesis.speak(utter)
 }
-import styles from './study.module.css'
 
 type QuizState = 'playing' | 'wrong' | 'finished'
 
@@ -40,19 +42,31 @@ function buildQuiz(words: Word[]): QuizQuestion[] {
 
 const spring: Transition = { type: 'spring', stiffness: 420, damping: 30 }
 
-interface Props { words: Word[] }
+interface Props { words: Word[]; onExit?: () => void; onFinish?: (score: number, total: number) => void }
 
-export default function QuizClient({ words }: Props) {
+export default function QuizClient({ words, onExit, onFinish }: Props) {
+    const supabase = createClient()
     const [quiz, setQuiz] = useState<QuizQuestion[]>([])
     const [index, setIndex] = useState(0)
     const [score, setScore] = useState(0)
     const [selected, setSelected] = useState<string | null>(null)
     const [quizState, setQuizState] = useState<QuizState>('playing')
 
+    // 타이머 리셋 트리거 (문제 변경 시 증가)
+    const [timerReset, setTimerReset] = useState(0)
+
+    // 오답 단어 추적
+    const wrongWordIdsRef = useRef<number[]>([])
+    const wrongSavedRef = useRef(false)
+
     const initQuiz = useCallback(() => {
         setQuiz(buildQuiz(words))
         setIndex(0); setScore(0)
         setSelected(null); setQuizState('playing')
+        setTimerReset(t => t + 1)
+        wrongWordIdsRef.current = []
+        wrongSavedRef.current = false
+        finishCalledRef.current = false
     }, [words])
 
     useEffect(() => { initQuiz() }, [initQuiz])
@@ -65,8 +79,48 @@ export default function QuizClient({ words }: Props) {
         return () => clearTimeout(timer)
     }, [index, quiz])
 
+    // 오답/타임아웃 시 1.5초 후 자동으로 다음 문제
+    useEffect(() => {
+        if (quizState !== 'wrong') return
+        const timer = setTimeout(() => {
+            if (index + 1 >= quiz.length) setQuizState('finished')
+            else { setIndex(i => i + 1); setSelected(null); setQuizState('playing'); setTimerReset(t => t + 1) }
+        }, 1500)
+        return () => clearTimeout(timer)
+    }, [quizState, index, quiz.length])
+
+    // 퀴즈 종료 시 결과 콜백 + 오답 단어 저장
+    const finishCalledRef = useRef(false)
+    useEffect(() => {
+        if (quizState !== 'finished') return
+        if (!finishCalledRef.current) {
+            finishCalledRef.current = true
+            onFinish?.(score, quiz.length)
+        }
+        if (wrongSavedRef.current || wrongWordIdsRef.current.length === 0) return
+        wrongSavedRef.current = true
+
+        async function saveWrongWords() {
+            const { data: { user } } = await supabase.auth.getUser()
+            if (!user) return
+            await supabase.rpc('record_wrong_words', {
+                p_user_id: user.id,
+                p_word_ids: wrongWordIdsRef.current,
+            })
+        }
+        saveWrongWords()
+    }, [quizState, supabase])
+
     const current = quiz[index]
     if (!current) return null
+
+    // 4초 타임아웃 → 오답 처리 + 자동 넘기기
+    function handleTimeout() {
+        if (selected !== null || quizState !== 'playing') return
+        wrongWordIdsRef.current.push(current.word.id)
+        setSelected('__timeout__')
+        setQuizState('wrong')
+    }
 
     function handleSelect(option: string) {
         if (selected !== null) return
@@ -77,22 +131,19 @@ export default function QuizClient({ words }: Props) {
             setScore(next)
             setTimeout(() => {
                 if (index + 1 >= quiz.length) { setScore(next); setQuizState('finished') }
-                else { setIndex(i => i + 1); setSelected(null); setQuizState('playing') }
+                else { setIndex(i => i + 1); setSelected(null); setQuizState('playing'); setTimerReset(t => t + 1) }
             }, 650)
         } else {
+            wrongWordIdsRef.current.push(current.word.id)
             setQuizState('wrong')
         }
-    }
-
-    function handleNext() {
-        if (index + 1 >= quiz.length) setQuizState('finished')
-        else { setIndex(i => i + 1); setSelected(null); setQuizState('playing') }
     }
 
     /* 결과 화면 */
     if (quizState === 'finished') {
         const pct = Math.round((score / quiz.length) * 100)
-        const emoji = pct === 100 ? '🏆' : pct >= 70 ? '👍' : '💪'
+        const isSuccess = pct >= 90
+        const emoji = pct === 100 ? '🏆' : pct >= 90 ? '🎉' : pct >= 70 ? '👍' : '💪'
         return (
             <motion.div
                 className={`${styles.glass} ${styles.quizResult}`}
@@ -107,12 +158,26 @@ export default function QuizClient({ words }: Props) {
                     <span className={styles.resultTotal}> / {quiz.length}</span>
                 </p>
                 <p className={styles.resultPct}>{pct}% 정답</p>
-                <motion.button
-                    className={styles.retryBtn}
-                    onClick={initQuiz}
-                    whileTap={{ scale: 0.93 }}
-                    transition={spring}
-                >🔄 다시 풀기</motion.button>
+                <p className={isSuccess ? styles.resultSuccess : styles.resultFail}>
+                    {isSuccess ? '성공! (90% 이상)' : '90% 이상이면 성공입니다'}
+                </p>
+                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                    <motion.button
+                        className={styles.retryBtn}
+                        onClick={initQuiz}
+                        whileTap={{ scale: 0.93 }}
+                        transition={spring}
+                    >🔄 다시 풀기</motion.button>
+                    {onExit && (
+                        <motion.button
+                            className={styles.retryBtn}
+                            onClick={onExit}
+                            whileTap={{ scale: 0.93 }}
+                            transition={spring}
+                            style={{ background: 'linear-gradient(135deg, #64748b, #94a3b8)' }}
+                        >✕ 나가기</motion.button>
+                    )}
+                </div>
             </motion.div>
         )
     }
@@ -132,6 +197,14 @@ export default function QuizClient({ words }: Props) {
                 </div>
                 <span className={styles.progressText}>{index + 1} / {quiz.length}</span>
             </div>
+
+            {/* 4초 타이머 */}
+            <QuizTimerBar
+                onTimeout={handleTimeout}
+                resetTrigger={timerReset}
+                stopped={selected !== null}
+                totalTimeSec={4}
+            />
 
             {/* 문제 카드 */}
             <AnimatePresence mode="wait">
@@ -173,7 +246,7 @@ export default function QuizClient({ words }: Props) {
                 })}
             </div>
 
-            {/* 오답 피드백 */}
+            {/* 오답 피드백 (1.5초 후 자동 넘김) */}
             <AnimatePresence>
                 {quizState === 'wrong' && (
                     <motion.div
@@ -183,13 +256,10 @@ export default function QuizClient({ words }: Props) {
                         exit={{ opacity: 0 }}
                         transition={spring}
                     >
-                        <p>정답: <strong>{current.correct}</strong></p>
-                        <motion.button
-                            className={styles.nextBtn}
-                            onClick={handleNext}
-                            whileTap={{ scale: 0.93 }}
-                            transition={spring}
-                        >다음 →</motion.button>
+                        <p>
+                            {selected === '__timeout__' ? '⏰ 시간 초과! ' : ''}
+                            정답: <strong>{current.correct}</strong>
+                        </p>
                     </motion.div>
                 )}
             </AnimatePresence>

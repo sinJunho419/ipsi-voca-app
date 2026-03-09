@@ -86,13 +86,21 @@
 }
 
 /* ── 레벨/세트 컨트롤 박스 ── */
-.controls {
+/* ── 컨트롤 3줄 래퍼 ── */
+.controlsWrap {
   display: flex;
+  flex-direction: column;
   gap: 0.75rem;
   padding: 1rem 1.25rem;
 }
 
-.controls select {
+/* 1줄: 셀렉트 행 */
+.selectRow {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.selectRow select {
   flex: 1;
   padding: 0.6rem 0.9rem;
   border-radius: 1rem;
@@ -113,12 +121,23 @@
   padding-right: 2.2rem;
 }
 
+.selectRow select:focus {
+  border-color: var(--blue);
+}
+
+/* 2줄: 액션 버튼 행 */
+.actionRow {
+  display: flex;
+  gap: 0.5rem;
+}
+
 .battleBtn {
+  flex: 1;
   background: linear-gradient(135deg, #10b981 0%, #059669 100%);
   border: none;
   border-radius: 1rem;
-  padding: 0.6rem 1.1rem;
-  font-size: 0.9rem;
+  padding: 0.75rem 1rem;
+  font-size: 1rem;
   font-weight: 700;
   color: white;
   cursor: pointer;
@@ -136,11 +155,181 @@
   transform: translateY(0);
 }
 
-.controls select:focus {
-  border-color: var(--blue);
+.reportBtn {
+  flex: 1;
+  background: linear-gradient(135deg, #6366f1 0%, #818cf8 100%);
+  border: none;
+  border-radius: 1rem;
+  padding: 0.75rem 1rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: white;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s;
+  white-space: nowrap;
 }
 
-/* ── 탭 ── */
+.reportBtn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(99, 102, 241, 0.3);
+}
+
+.reportBtn:active {
+  transform: translateY(0);
+}
+
+/* ── 성공 횟수 & 메달 ── */
+.progressStatus {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 0.2rem;
+  gap: 0.75rem;
+}
+
+.successDots {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.statusLabel {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  font-weight: 600;
+  margin-right: 0.2rem;
+  white-space: nowrap;
+}
+
+.dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: rgba(100, 116, 139, 0.5);
+  border: 2px solid #94a3b8;
+  transition: all 0.3s;
+}
+
+.dotFilled {
+  background: #4ade80;
+  border-color: #22c55e;
+  box-shadow: 0 0 6px rgba(74, 222, 128, 0.5);
+}
+
+.successText {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  font-weight: 700;
+  margin-left: 0.1rem;
+}
+
+.masterBtn {
+  background: linear-gradient(135deg, #f59e0b, #eab308);
+  border: none;
+  border-radius: 0.6rem;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #1a1a2e;
+  cursor: pointer;
+  white-space: nowrap;
+  margin-left: 0.3rem;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+}
+
+.medalDisplay {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 1rem;
+  padding: 0.25rem 0.6rem;
+}
+
+.medalIcon {
+  font-size: 1.1rem;
+}
+
+.medalCount {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #fbbf24;
+}
+
+/* ── 마스터 챌린지 ── */
+.masterHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.masterTitle {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #fbbf24;
+}
+
+.masterRule {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.5);
+  font-weight: 500;
+}
+
+.masterQuestion {
+  min-height: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.masterSentence {
+  font-size: 1.1rem;
+  line-height: 1.7;
+  text-align: center;
+  color: #1e293b;
+  word-break: keep-all;
+}
+
+.masterCompleteBtn {
+  background: linear-gradient(135deg, #f59e0b, #eab308);
+  border: none;
+  border-radius: 1rem;
+  padding: 0.85rem 2rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #1a1a2e;
+  cursor: pointer;
+  margin-top: 0.5rem;
+  box-shadow: 0 4px 16px rgba(245, 158, 11, 0.3);
+}
+
+/* ── 퀴즈 결과 성공/실패 ── */
+.resultSuccess {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #4ade80;
+  margin-top: 0.2rem;
+}
+
+.resultFail {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.45);
+  margin-top: 0.2rem;
+}
+
+/* ── 3줄: 탭 ── */
+.selectHint {
+  text-align: center;
+  padding: 1.2rem 0 0.4rem;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
 .tabs {
   display: flex;
   gap: 0.4rem;
@@ -516,4 +705,321 @@
 
 .retryBtn:hover {
   opacity: 0.88;
+}
+
+/* ── 퀴즈 타이머 바 ── */
+.timerBarTrack {
+  width: 100%;
+  height: 6px;
+  background: rgba(0, 0, 0, 0.08);
+  border-radius: 3px;
+  overflow: hidden;
+  margin: 8px 0;
+}
+
+.timerBarFill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.01s linear, background-color 0.3s;
+}
+
+/* ══════════════════════════════════════════
+   오답 관리 시스템
+   ══════════════════════════════════════════ */
+
+/* ── 리벤지 버튼 ── */
+/* ── 액션 버튼 행 ── */
+.wrongActionsRow {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.revengeBtn {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  border: none;
+  border-radius: 1rem;
+  padding: 0.6rem 1.1rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: white;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);
+  transition: transform 0.2s, box-shadow 0.2s;
+  white-space: nowrap;
+}
+
+.revengeBtn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(239, 68, 68, 0.3);
+}
+
+.revengeBtn:disabled {
+  background: #cbd5e1;
+  box-shadow: none;
+  cursor: default;
+}
+
+/* ── 리벤지 배틀 버튼 ── */
+.revengeBattleBtn {
+  flex: 1;
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  border: none;
+  border-radius: 1rem;
+  padding: 0.6rem 1.1rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: white;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+  transition: transform 0.2s, box-shadow 0.2s;
+  white-space: nowrap;
+}
+
+.revengeBattleBtn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(99, 102, 241, 0.3);
+}
+
+.revengeBattleBtn:disabled {
+  background: #cbd5e1;
+  box-shadow: none;
+  cursor: default;
+}
+
+/* ── 오답 단어 목록 ── */
+.wrongWordsList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 420px;
+  overflow-y: auto;
+  padding: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(99, 102, 241, 0.15) transparent;
+}
+
+.wrongWordsList::-webkit-scrollbar {
+  width: 4px;
+}
+
+.wrongWordsList::-webkit-scrollbar-thumb {
+  background: rgba(99, 102, 241, 0.15);
+  border-radius: 2px;
+}
+
+.wrongWordCard {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.9rem 1.25rem;
+  gap: 0.75rem;
+}
+
+.wrongWordMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.wrongWordText {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: -0.02em;
+}
+
+.wrongWordMeaning {
+  font-size: 0.8rem;
+  color: var(--text-sub);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wrongWordMeta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.wrongCountBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.08);
+  padding: 2px 8px;
+  border-radius: 8px;
+}
+
+/* ── 연속 정답 게이지 (도트) ── */
+.consecutiveRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+}
+
+.consecutiveDots {
+  display: flex;
+  gap: 4px;
+}
+
+.dotFilled {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #10b981, #34d399);
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.4);
+}
+
+.dotEmpty {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.consecutiveLabel {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-sub);
+}
+
+.wrongCount {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #ef4444;
+  margin-left: auto;
+}
+
+/* ── 졸업 단어 박스 ── */
+.graduatedBox {
+  width: 100%;
+  background: rgba(16, 185, 129, 0.08);
+  border: 1.5px solid rgba(16, 185, 129, 0.25);
+  border-radius: 1rem;
+  padding: 1rem;
+  margin: 0.5rem 0;
+}
+
+.graduatedTitle {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #059669;
+  margin: 0 0 0.5rem;
+}
+
+.graduatedList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.graduatedWord {
+  background: rgba(16, 185, 129, 0.15);
+  color: #065f46;
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 8px;
+}
+
+/* ── 필터 탭 ── */
+.filterRow {
+  display: flex;
+  gap: 0.3rem;
+  padding: 0.35rem;
+}
+
+.filterBtn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0.5rem 0.4rem;
+  border: none;
+  border-radius: 1rem;
+  background: transparent;
+  color: var(--text-sub);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+
+.filterBtn:hover {
+  background: rgba(99, 102, 241, 0.06);
+}
+
+.filterActive {
+  background: linear-gradient(135deg, var(--blue), #818cf8) !important;
+  color: #fff !important;
+  box-shadow: 0 3px 12px rgba(99, 102, 241, 0.3);
+}
+
+.filterDanger {
+  background: linear-gradient(135deg, #ef4444, #f87171) !important;
+  box-shadow: 0 3px 12px rgba(239, 68, 68, 0.3) !important;
+}
+
+.filterGrad {
+  background: linear-gradient(135deg, #10b981, #34d399) !important;
+  box-shadow: 0 3px 12px rgba(16, 185, 129, 0.3) !important;
+}
+
+.filterGraduated {
+  background: linear-gradient(135deg, #059669, #10b981) !important;
+  box-shadow: 0 3px 12px rgba(16, 185, 129, 0.3) !important;
+}
+
+.filterCount {
+  font-size: 0.7rem;
+  font-weight: 800;
+  background: rgba(255, 255, 255, 0.25);
+  padding: 1px 6px;
+  border-radius: 6px;
+  min-width: 18px;
+  text-align: center;
+}
+
+/* ── 졸업 배지 ── */
+.masteredBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #059669;
+  background: rgba(16, 185, 129, 0.12);
+  padding: 2px 8px;
+  border-radius: 8px;
+}
+
+/* ── 졸업 토스트 ── */
+.graduationToast {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0.75rem 1.25rem;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(52, 211, 153, 0.12));
+  border: 1.5px solid rgba(16, 185, 129, 0.4);
+  border-radius: 1.25rem;
+  color: #059669;
+  font-size: 0.95rem;
+  font-weight: 800;
+  box-shadow: 0 4px 16px rgba(16, 185, 129, 0.2);
 }

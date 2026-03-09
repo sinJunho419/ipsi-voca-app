@@ -9,6 +9,7 @@ import crypto from 'crypto'
 export async function GET(request: NextRequest) {
     const { searchParams } = request.nextUrl
     const userId = searchParams.get('user_id') || 'test_user_999'
+    const redirect = searchParams.get('redirect') || '/study'
 
     const secret = process.env.AUTH_HMAC_SECRET?.trim()
     if (!secret) {
@@ -19,7 +20,7 @@ export async function GET(request: NextRequest) {
     const payload = userId + ts
     const token = crypto.createHmac('sha256', secret).update(payload).digest('hex')
 
-    // 생성한 유효한 SSO URL로 바로 리다이렉트!
-    const ssoUrl = new URL(`/api/auth/sso?user_id=${userId}&ts=${ts}&token=${token}`, request.url)
+    // 생성한 유효한 SSO URL로 바로 리다이렉트! (redirect 파라미터로 로그인 후 이동할 경로 지정)
+    const ssoUrl = new URL(`/api/auth/sso?user_id=${userId}&ts=${ts}&token=${token}&redirect=${encodeURIComponent(redirect)}`, request.url)
     return NextResponse.redirect(ssoUrl)
 }

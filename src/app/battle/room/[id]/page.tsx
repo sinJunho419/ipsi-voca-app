@@ -1,9 +1,10 @@
 'use client'
 
-import { use, useEffect, useState } from 'react'
+import { use, useEffect, useState, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
+import { Crown, Swords, Users, User, LogOut } from 'lucide-react'
 import styles from '../room.module.css'
 import BattleClient from './BattleClient'
 
@@ -11,10 +12,15 @@ interface RoomData {
     id: string
     room_code: string
     host_id: string
-    guest_id: string | null
+    participant_ids: string[]
+    max_players: number
     status: 'waiting' | 'playing' | 'finished'
     level: string
     set_no: number
+    question_ids: number[] | null
+    finished_at: string | null
+    mode: 'normal' | 'revenge'
+    question_count: number
 }
 
 export default function RoomPage({ params }: { params: Promise<{ id: string }> }) {
@@ -27,17 +33,40 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
     const [isLoading, setIsLoading] = useState(true)
     const [errorMsg, setErrorMsg] = useState('')
 
-    // 1. 방 정보 로드 및 내 정보 확인
+    // 대기 타이머 (60초)
+    const [waitSeconds, setWaitSeconds] = useState(60)
+    const waitTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+    // 방장 위임 알림
+    const [hostTransferMsg, setHostTransferMsg] = useState('')
+    // 코드 복사 피드백
+    const [copyMsg, setCopyMsg] = useState('')
+
+    // 참여자 이름
+    const [participantNames, setParticipantNames] = useState<Record<string, string>>({})
+
+    // 전적 기록
+    const [records, setRecords] = useState<Record<string, { wins: number; losses: number }>>({})
+
+    // 1. 방 정보 로드 (로그인 불필요 — 게스트 ID 허용)
     useEffect(() => {
         let isMounted = true
 
         async function init() {
             const { data: { user } } = await supabase.auth.getUser()
-            if (!user) {
-                if (isMounted) setErrorMsg('로그인이 필요합니다.')
-                return
+            let uid = user?.id || null
+
+            // 비로그인 → 게스트 ID 사용
+            if (!uid) {
+                let guestId = localStorage.getItem('battle_guest_id')
+                if (!guestId) {
+                    guestId = crypto.randomUUID()
+                    localStorage.setItem('battle_guest_id', guestId)
+                }
+                uid = guestId
             }
-            if (isMounted) setUserId(user.id)
+
+            if (isMounted) setUserId(uid)
 
             const { data: roomData, error } = await supabase
                 .from('battle_rooms')
@@ -57,11 +86,10 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
         }
 
         init()
-
         return () => { isMounted = false }
     }, [roomId, supabase])
 
-    // 2. Supabase Realtime 구독 (Postgres Changes)
+    // 2. Realtime 구독 (Postgres Changes)
     useEffect(() => {
         if (!roomId) return
 
@@ -69,17 +97,186 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
             .on(
                 'postgres_changes',
                 { event: 'UPDATE', schema: 'public', table: 'battle_rooms', filter: `id=eq.${roomId}` },
-                (payload) => {
-                    console.log('Realtime Room Update:', payload.new)
-                    setRoom(payload.new as RoomData)
-                }
+                (payload) => setRoom(payload.new as RoomData)
             )
             .subscribe()
 
-        return () => {
-            supabase.removeChannel(channel)
-        }
+        return () => { supabase.removeChannel(channel) }
     }, [roomId, supabase])
+
+    // 3. 참여자 이름 조회 (participant_ids 변경 시)
+    useEffect(() => {
+        const ids = room?.participant_ids
+        if (!ids?.length) return
+
+        async function fetchNames() {
+            const { data } = await supabase
+                .from('profiles')
+                .select('id, name')
+                .in('id', ids!)
+            if (data) {
+                const names: Record<string, string> = {}
+                data.forEach(p => { names[p.id] = p.name || '익명' })
+                setParticipantNames(names)
+            }
+        }
+        fetchNames()
+    }, [room?.participant_ids?.length, supabase]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    // 3.5. 전적 기록 조회
+    useEffect(() => {
+        const ids = room?.participant_ids
+        if (!ids?.length) return
+
+        async function fetchRecords() {
+            const { data: histories } = await supabase
+                .from('battle_history')
+                .select('winner_id, participants_ids')
+                .overlaps('participants_ids', ids!)
+
+            if (!histories) return
+
+            const rec: Record<string, { wins: number; losses: number }> = {}
+            ids!.forEach(id => { rec[id] = { wins: 0, losses: 0 } })
+
+            histories.forEach((h: { winner_id: string | null; participants_ids: string[] }) => {
+                (h.participants_ids || []).forEach((pid: string) => {
+                    if (!rec[pid]) return
+                    if (h.winner_id === pid) rec[pid].wins++
+                    else if (h.winner_id) rec[pid].losses++
+                })
+            })
+
+            setRecords(rec)
+        }
+        fetchRecords()
+    }, [room?.participant_ids?.length, supabase]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    // 4. Presence 채널 - 방장 이탈 감지 & 자동 위임 (디바운스)
+    const hostTransferTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+    useEffect(() => {
+        if (!room || room.status !== 'waiting' || !userId) return
+
+        const presenceChannel = supabase.channel(`presence:${roomId}`)
+
+        presenceChannel
+            .on('presence', { event: 'sync' }, () => {
+                const state = presenceChannel.presenceState()
+                const onlineUserIds = Object.values(state)
+                    .flat()
+                    .map((p: Record<string, unknown>) => p.user_id as string)
+
+                const participants = room.participant_ids || []
+                const hostOffline = !onlineUserIds.includes(room.host_id)
+                const iAmParticipant = participants.includes(userId) && room.host_id !== userId
+
+                // 방장이 오프라인이고, 내가 온라인 참여자 중 첫 번째이면 위임 받기
+                if (hostOffline && iAmParticipant) {
+                    const nextHost = participants.find(
+                        id => id !== room.host_id && onlineUserIds.includes(id)
+                    )
+                    if (nextHost === userId) {
+                        if (hostTransferTimerRef.current) clearTimeout(hostTransferTimerRef.current)
+                        hostTransferTimerRef.current = setTimeout(async () => {
+                            const others = participants.filter(id => id !== room.host_id)
+                            await supabase
+                                .from('battle_rooms')
+                                .update({ host_id: userId, participant_ids: others })
+                                .eq('id', roomId)
+                            setHostTransferMsg('방장이 나갔습니다. 당신이 새 방장이 되었습니다!')
+                            setTimeout(() => setHostTransferMsg(''), 3000)
+                        }, 3000)
+                    }
+                } else {
+                    if (hostTransferTimerRef.current) {
+                        clearTimeout(hostTransferTimerRef.current)
+                        hostTransferTimerRef.current = null
+                    }
+                }
+            })
+            .subscribe(async (status) => {
+                if (status === 'SUBSCRIBED') {
+                    await presenceChannel.track({ user_id: userId })
+                }
+            })
+
+        return () => {
+            if (hostTransferTimerRef.current) clearTimeout(hostTransferTimerRef.current)
+            supabase.removeChannel(presenceChannel)
+        }
+    }, [room?.status, room?.host_id, room?.participant_ids?.length, userId, roomId, supabase])
+
+    // 5. 대기 타이머 (60초)
+    useEffect(() => {
+        if (!room || room.status !== 'waiting') return
+
+        setWaitSeconds(60)
+        waitTimerRef.current = setInterval(() => {
+            setWaitSeconds(prev => {
+                if (prev <= 1) {
+                    if (waitTimerRef.current) clearInterval(waitTimerRef.current)
+                    return 0
+                }
+                return prev - 1
+            })
+        }, 1000)
+
+        return () => {
+            if (waitTimerRef.current) clearInterval(waitTimerRef.current)
+        }
+    }, [room?.status])
+
+    // 타이머 만료 시: 2명 이상 → 자동 시작 / 방장 혼자 → 방 폭파
+    useEffect(() => {
+        if (waitSeconds > 0 || !room || room.status !== 'waiting') return
+
+        const count = room.participant_ids?.length || 0
+
+        // 방장만 액션 수행 (다른 참여자는 Realtime으로 감지)
+        if (room.host_id === userId) {
+            if (count >= 2) {
+                // 2명 이상: 자동 배틀 시작
+                fetch('/api/battle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'start', roomId }),
+                })
+            } else {
+                // 방장 혼자: 방 폭파 → 로비로 이동
+                fetch('/api/battle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'leave', roomId, userId }),
+                }).then(() => router.push('/battle/lobby'))
+            }
+        }
+    }, [waitSeconds, room, userId, roomId, router])
+
+    // 6. 방 자동 정리: finished 후 5분 경과 시
+    useEffect(() => {
+        if (!room || room.status !== 'finished' || !room.finished_at) return
+
+        const remaining = 5 * 60 * 1000 - (Date.now() - new Date(room.finished_at).getTime())
+
+        if (remaining <= 0) { router.push('/battle/lobby'); return }
+
+        const timer = setTimeout(() => router.push('/battle/lobby'), remaining)
+        return () => clearTimeout(timer)
+    }, [room?.status, room?.finished_at, router])
+
+    // 나가기 처리 (서버 API → RLS 우회)
+    const handleLeave = useCallback(async () => {
+        if (!room || !userId) { router.push('/battle/lobby'); return }
+
+        await fetch('/api/battle', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'leave', roomId, userId }),
+        })
+
+        router.push('/battle/lobby')
+    }, [room, userId, roomId, router])
 
     if (errorMsg) {
         return (
@@ -104,24 +301,27 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
     }
 
     const isHost = room.host_id === userId
-    const hasGuest = !!room.guest_id
+    const participantCount = room.participant_ids?.length || 0
 
-    // 방장: 시작 버튼 핸들러
+    // 방장: 배틀 시작 핸들러 (2명 이상일 때만)
     const handleStartBattle = async () => {
-        if (!isHost || !hasGuest) return
+        if (!isHost || participantCount < 2) return
 
-        const { error } = await supabase
-            .from('battle_rooms')
-            .update({ status: 'playing' })
-            .eq('id', roomId)
+        if (waitTimerRef.current) clearInterval(waitTimerRef.current)
 
-        if (error) {
-            console.error('Failed to start battle:', error)
+        const res = await fetch('/api/battle', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'start', roomId }),
+        })
+
+        if (!res.ok) {
+            console.error('Failed to start battle')
             alert('배틀 시작에 실패했습니다.')
         }
     }
 
-    // 상태에 따른 화면 렌더링
+    // 배틀 진행/종료 화면
     if (room.status === 'playing' || room.status === 'finished') {
         return (
             <div className={styles.page}>
@@ -130,70 +330,135 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
         )
     }
 
-    // 기본 화면: Waiting Room (대기실)
+    const timerPercent = (waitSeconds / 60) * 100
+
+    // 대기실
     return (
         <div className={styles.page}>
             <div className={styles.blob1} />
             <div className={styles.blob2} />
 
             <motion.div
-                className={styles.card}
+                className={styles.waitingWrap}
                 initial={{ opacity: 0, y: 30 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ type: 'spring', stiffness: 280, damping: 25 }}
             >
-                <div className={styles.header}>
-                    <p className={styles.label}>초대 코드</p>
-                    <h1 className={styles.roomCode}>{room.room_code}</h1>
-                    <p className={styles.subtitle}>친구에게 코드를 알려주세요!</p>
+                {/* ── 상단: 초대 코드 배너 ── */}
+                <div className={styles.inviteBanner}>
+                    {room.mode === 'revenge' && (
+                        <div className={styles.revengeBadge}>
+                            <Swords size={14} /> 리벤지 배틀
+                        </div>
+                    )}
+                    <div className={styles.inviteRow}>
+                        <span className={styles.inviteLabel}>초대 코드:</span>
+                        <span className={styles.inviteCode}>{room.room_code}</span>
+                        <button
+                            className={styles.copyBtn}
+                            onClick={() => {
+                                navigator.clipboard.writeText(room.room_code).catch(() => {})
+                                setCopyMsg('복사됨!')
+                                setTimeout(() => setCopyMsg(''), 1500)
+                            }}
+                        >
+                            {copyMsg || '복사'}
+                        </button>
+                    </div>
+                    <p className={styles.inviteHint}>친구들에게 공유하세요!</p>
                 </div>
 
-                <div className={styles.playerContainer}>
-                    <div className={styles.playerCard}>
-                        <div className={styles.avatarWrap}>
-                            <span className={styles.avatar}>👑</span>
-                        </div>
-                        <p className={styles.playerName}>
-                            {isHost ? '나 (방장)' : '방장'}
-                        </p>
+                {/* ── 방장 위임 알림 ── */}
+                <AnimatePresence>
+                    {hostTransferMsg && (
+                        <motion.div
+                            className={styles.transferMsg}
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                        >
+                            {hostTransferMsg}
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                {/* ── 카운트다운 타이머 ── */}
+                <div className={styles.timerSection}>
+                    <div className={styles.timerTrack}>
+                        <motion.div
+                            className={styles.timerFillWait}
+                            animate={{ width: `${timerPercent}%` }}
+                            transition={{ duration: 1, ease: 'linear' }}
+                            style={{
+                                backgroundColor: waitSeconds > 30 ? '#4ade80' : waitSeconds > 10 ? '#facc15' : '#ef4444',
+                            }}
+                        />
                     </div>
+                    <p className={`${styles.timerText} ${waitSeconds <= 10 ? styles.timerUrgent : ''}`}>
+                        {participantCount >= 2
+                            ? `${waitSeconds}초 후 자동 시작`
+                            : `${waitSeconds}초 후 방 자동 종료`}
+                    </p>
+                </div>
 
-                    <div className={styles.vs}>VS</div>
-
-                    <div className={`${styles.playerCard} ${!hasGuest ? styles.empty : ''}`}>
-                        <div className={styles.avatarWrap}>
-                            <span className={styles.avatar}>
-                                {hasGuest ? '😎' : '⏳'}
-                            </span>
-                        </div>
-                        <p className={styles.playerName}>
-                            {hasGuest
-                                ? (isHost ? '상대방' : '나 (참가자)')
-                                : '대기 중...'
-                            }
-                        </p>
+                {/* ── 참여자 리스트 ── */}
+                <div className={styles.participantSection}>
+                    <p className={styles.participantHeader}>
+                        <Users size={16} />
+                        참여자 {participantCount}명
+                    </p>
+                    <div className={styles.participantList}>
+                        {(room.participant_ids || []).map((pid) => {
+                            const isThisHost = pid === room.host_id
+                            const isMe = pid === userId
+                            return (
+                                <motion.div
+                                    key={pid}
+                                    className={`${styles.participantItem} ${isMe ? styles.participantMe : ''}`}
+                                    initial={{ opacity: 0, x: -10 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                >
+                                    <div className={styles.participantAvatar}>
+                                        {isThisHost ? <Crown size={16} /> : <User size={16} />}
+                                    </div>
+                                    <span className={styles.participantName}>
+                                        {participantNames[pid] || '로딩...'}
+                                        {isMe && ' (나)'}
+                                    </span>
+                                    {isThisHost && <span className={styles.hostTag}>방장</span>}
+                                    <div className={styles.recordBadge}>
+                                        <span className={styles.recordWin}>{records[pid]?.wins ?? 0}승</span>
+                                        <span className={styles.recordLose}>{records[pid]?.losses ?? 0}패</span>
+                                    </div>
+                                </motion.div>
+                            )
+                        })}
                     </div>
                 </div>
 
+                {/* ── 하단 액션 ── */}
                 <div className={styles.actions}>
                     {isHost ? (
                         <button
                             className={styles.btnPrimary}
                             onClick={handleStartBattle}
-                            disabled={!hasGuest}
+                            disabled={participantCount < 2}
                         >
-                            {hasGuest ? '배틀 시작하기' : '상대방 기다리는 중...'}
+                            {participantCount >= 2
+                                ? `🚀 배틀 시작 (${participantCount}명)`
+                                : '⏳ 상대를 기다리는 중...'}
                         </button>
                     ) : (
                         <div className={styles.waitingMsg}>
                             <div className={styles.spinner} />
-                            <p>방장이 시작하기를 기다리고 있습니다...</p>
+                            <p>방장이 시작하기를 기다리는 중...</p>
                         </div>
                     )}
                 </div>
 
-                <button className={styles.backBtn} onClick={() => router.push('/battle/lobby')}>
-                    ← 나가기
+                <button className={styles.backBtn} onClick={handleLeave}>
+                    <LogOut size={14} style={{ display: 'inline', verticalAlign: '-2px', marginRight: '4px' }} />
+                    나가기
                 </button>
             </motion.div>
         </div>
