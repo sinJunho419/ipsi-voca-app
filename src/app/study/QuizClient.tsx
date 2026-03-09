@@ -101,11 +101,27 @@ export default function QuizClient({ words, onExit, onFinish }: Props) {
         wrongSavedRef.current = true
 
         async function saveWrongWords() {
+            const ids = wrongWordIdsRef.current
+            // localStorage에 오답 저장 (비로그인용)
+            try {
+                const stored: Record<number, { wrong_count: number; consecutive_correct: number; status: string; last_wrong_at: string }> = JSON.parse(localStorage.getItem('local_wrong_words') || '{}')
+                for (const wid of ids) {
+                    const existing = stored[wid] || { wrong_count: 0, consecutive_correct: 0, status: 'Learning', last_wrong_at: '' }
+                    existing.wrong_count += 1
+                    existing.consecutive_correct = 0
+                    existing.status = 'Learning'
+                    existing.last_wrong_at = new Date().toISOString()
+                    stored[wid] = existing
+                }
+                localStorage.setItem('local_wrong_words', JSON.stringify(stored))
+            } catch { /* ignore */ }
+
+            // 로그인 시 Supabase에도 저장
             const { data: { user } } = await supabase.auth.getUser()
             if (!user) return
             await supabase.rpc('record_wrong_words', {
                 p_user_id: user.id,
-                p_word_ids: wrongWordIdsRef.current,
+                p_word_ids: ids,
             })
         }
         saveWrongWords()

@@ -76,12 +76,76 @@ export default function WrongWordsClient({ onExit }: Props) {
     useEffect(() => {
         async function init() {
             const { data: { user } } = await supabase.auth.getUser()
-            if (!user) { setIsLoading(false); return }
-            setUserId(user.id)
-            await fetchWrongWords(user.id)
+            if (user) {
+                setUserId(user.id)
+                await fetchWrongWords(user.id)
+            } else {
+                // 비로그인: localStorage에서 오답 불러오기
+                setUserId('local')
+                await fetchLocalWrongWords()
+            }
         }
         init()
     }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+    async function fetchLocalWrongWords() {
+        setIsLoading(true)
+        try {
+            const stored: Record<string, { wrong_count: number; consecutive_correct: number; status: string; last_wrong_at: string }> = JSON.parse(localStorage.getItem('local_wrong_words') || '{}')
+            const entries = Object.entries(stored)
+            if (entries.length === 0) {
+                setWrongWords([]); setMasteredWords([]); setIsLoading(false); return
+            }
+
+            const wordIds = entries.map(([id]) => Number(id))
+            const { data: words } = await supabase.from('words').select('*').in('id', wordIds)
+            const wordMap = new Map((words || []).map(w => [w.id, w as Word]))
+
+            const learning: WrongWordEntry[] = []
+            const mastered: WrongWordEntry[] = []
+            for (const [idStr, info] of entries) {
+                const wid = Number(idStr)
+                const w = wordMap.get(wid)
+                if (!w) continue
+                const entry: WrongWordEntry = {
+                    id: wid, word_id: wid,
+                    wrong_count: info.wrong_count,
+                    consecutive_correct: info.consecutive_correct,
+                    status: info.status,
+                    last_wrong_at: info.last_wrong_at,
+                    word: w,
+                }
+                if (info.status === 'Mastered') mastered.push(entry)
+                else learning.push(entry)
+            }
+            learning.sort((a, b) => b.wrong_count - a.wrong_count)
+            setWrongWords(learning)
+            setMasteredWords(mastered)
+
+            const cMap: Record<number, number> = {}
+            learning.forEach(e => { cMap[e.word_id] = e.consecutive_correct })
+            setConsecutiveMap(cMap)
+        } catch { setWrongWords([]); setMasteredWords([]) }
+        setIsLoading(false)
+    }
+
+    function saveLocalWrongWord(wordId: number, correct: boolean) {
+        try {
+            const stored: Record<string, { wrong_count: number; consecutive_correct: number; status: string; last_wrong_at: string }> = JSON.parse(localStorage.getItem('local_wrong_words') || '{}')
+            const key = String(wordId)
+            const entry = stored[key] || { wrong_count: 0, consecutive_correct: 0, status: 'Learning', last_wrong_at: '' }
+            if (correct) {
+                entry.consecutive_correct += 1
+                if (entry.consecutive_correct >= 3) entry.status = 'Mastered'
+            } else {
+                entry.consecutive_correct = 0
+            }
+            entry.last_wrong_at = new Date().toISOString()
+            stored[key] = entry
+            localStorage.setItem('local_wrong_words', JSON.stringify(stored))
+            return entry.status
+        } catch { return 'Learning' }
+    }
 
     async function fetchWrongWords(uid: string) {
         setIsLoading(true)
@@ -194,14 +258,21 @@ export default function WrongWordsClient({ onExit }: Props) {
         setSelected(option)
 
         const current = quiz[index]
+        const isLocal = userId === 'local'
 
         if (option === current.correct) {
             setScore(s => s + 1)
 
-            const { data: status } = await supabase.rpc('record_revenge_correct', {
-                p_user_id: userId,
-                p_word_id: current.entry.word_id,
-            })
+            let status: string | null = null
+            if (isLocal) {
+                status = saveLocalWrongWord(current.entry.word_id, true)
+            } else {
+                const { data } = await supabase.rpc('record_revenge_correct', {
+                    p_user_id: userId,
+                    p_word_id: current.entry.word_id,
+                })
+                status = data
+            }
 
             const newCount = (consecutiveMap[current.entry.word_id] || 0) + 1
             setConsecutiveMap(prev => ({ ...prev, [current.entry.word_id]: newCount }))
@@ -222,10 +293,14 @@ export default function WrongWordsClient({ onExit }: Props) {
             }, status === 'Mastered' ? 1200 : 800)
         } else {
             if (option !== '__timeout__') {
-                await supabase.rpc('record_revenge_wrong', {
-                    p_user_id: userId,
-                    p_word_id: current.entry.word_id,
-                })
+                if (isLocal) {
+                    saveLocalWrongWord(current.entry.word_id, false)
+                } else {
+                    await supabase.rpc('record_revenge_wrong', {
+                        p_user_id: userId,
+                        p_word_id: current.entry.word_id,
+                    })
+                }
                 setConsecutiveMap(prev => ({ ...prev, [current.entry.word_id]: 0 }))
             }
             setQuizState('wrong')
@@ -244,11 +319,12 @@ export default function WrongWordsClient({ onExit }: Props) {
 
     function backToList() {
         setMode('list')
-        if (userId) fetchWrongWords(userId)
+        if (userId === 'local') fetchLocalWrongWords()
+        else if (userId) fetchWrongWords(userId)
     }
 
     async function createRevengeBattle() {
-        if (!userId || wrongWords.length < 4 || creatingBattle) return
+        if (!userId || userId === 'local' || wrongWords.length < 4 || creatingBattle) return
         setCreatingBattle(true)
 
         const roomCode = Math.random().toString(36).substring(2, 8).toUpperCase()
