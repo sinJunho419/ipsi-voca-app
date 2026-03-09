@@ -13,14 +13,14 @@ export default async function StudyPage() {
         supabase
             .from('words')
             .select('set_no')
-            .eq('level', 'elem_low')
+            .eq('level', 'elem_3')
             .order('set_no', { ascending: false })
             .limit(1)
             .single(),
         supabase
             .from('words')
             .select('*')
-            .eq('level', 'elem_low')
+            .eq('level', 'elem_3')
             .eq('set_no', 1)
             .order('id'),
     ])

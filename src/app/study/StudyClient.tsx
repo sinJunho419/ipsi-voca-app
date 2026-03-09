@@ -9,10 +9,11 @@ import { useRouter } from 'next/navigation'
 import QuizClient from './QuizClient'
 
 const LEVELS: { value: Level; label: string }[] = [
-    { value: 'elem_low', label: '초등 영단어' },
-    { value: 'middle_1', label: '중등 1학년' },
-    { value: 'middle_2', label: '중등 2학년' },
-    { value: 'middle_3', label: '중등 3학년' },
+    { value: 'elem_3', label: '초등 3학년' },
+    { value: 'elem_4', label: '초등 4학년' },
+    { value: 'elem_5', label: '초등 5학년' },
+    { value: 'elem_6', label: '초등 6학년' },
+    { value: 'high_1', label: '고등 1학년' },
 ]
 
 type Tab = 'study' | 'quiz'
@@ -39,7 +40,7 @@ export default function StudyClient({ initialWords, initialMaxSet }: Props) {
     const router = useRouter()
 
     const [tab, setTab] = useState<Tab>('study')
-    const [level, setLevel] = useState<Level>('elem_low')
+    const [level, setLevel] = useState<Level>('elem_3')
     const [setNo, setSetNo] = useState<number>(1)
     const [availableSets, setAvailableSets] = useState<number[]>(
         Array.from({ length: initialMaxSet }, (_, i) => i + 1)
@@ -124,6 +125,10 @@ export default function StudyClient({ initialWords, initialMaxSet }: Props) {
 
     return (
         <div className={styles.page}>
+            <header className={styles.header}>
+                <h1 className={styles.title}>📚 입시내비 보카</h1>
+                <p className={styles.subtitle}>초등부터 고등까지 영단어 마스터</p>
+            </header>
             {/* 벤토 그리드 */}
             <div className={styles.bento}>
 
