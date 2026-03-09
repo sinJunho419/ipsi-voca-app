@@ -174,11 +174,11 @@ export default function StudyClient({ initialWords, initialMaxSet }: Props) {
                     {/* 1줄: 학년 & 세트 선택 */}
                     <div className={styles.selectRow}>
                         <select value={level ?? ''} onChange={e => changeLevel((e.target.value || null) as Level | null)} disabled={isPending}>
-                            <option value="" disabled>학년을 선택하세요</option>
+                            <option value="" disabled>학년 선택</option>
                             {LEVELS.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
                         </select>
                         <select value={setNo ?? ''} onChange={e => changeSet(e.target.value)} disabled={isPending || !level}>
-                            <option value="" disabled>세트를 선택하세요</option>
+                            <option value="" disabled>Set 선택</option>
                             {availableSets.map(n => (
                                 <option key={n} value={n}>Set {n}</option>
                             ))}
