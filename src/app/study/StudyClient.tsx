@@ -90,7 +90,11 @@ export default function StudyClient({ initialWords, initialMaxSet }: Props) {
     const [isFlipped, setIsFlipped] = useState(false)
     const [isPending, startTransition] = useTransition()
 
-    useEffect(() => { window.speechSynthesis.onvoiceschanged = () => { } }, [])
+    useEffect(() => {
+        if (typeof window !== 'undefined' && window.speechSynthesis) {
+            window.speechSynthesis.onvoiceschanged = () => { }
+        }
+    }, [])
 
     const prevIndexRef = useRef<number>(-1)
     const prevFlippedRef = useRef(false)
