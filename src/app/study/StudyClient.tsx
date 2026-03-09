@@ -16,7 +16,11 @@ const LEVELS: { value: Level; label: string }[] = [
     { value: 'elem_4', label: '초등 4학년' },
     { value: 'elem_5', label: '초등 5학년' },
     { value: 'elem_6', label: '초등 6학년' },
+    { value: 'mid_1', label: '중등 1학년' },
+    { value: 'mid_2', label: '중등 2학년' },
+    { value: 'mid_3', label: '중등 3학년' },
     { value: 'high_1', label: '고등 1학년' },
+    { value: 'high_2', label: '고등 2학년' },
 ]
 
 type Tab = 'study' | 'quiz' | 'wrong' | 'master'
