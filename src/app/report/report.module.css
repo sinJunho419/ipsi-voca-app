@@ -516,3 +516,34 @@
   background: #6366f1;
   transform: scale(1.25);
 }
+
+/* ── 숙어 정복 하이라이트 ── */
+.idiomHighlight {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 1rem;
+  padding: 0.85rem 1rem;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(251, 191, 36, 0.08));
+  border: 1.5px solid rgba(245, 158, 11, 0.3);
+  border-radius: 14px;
+}
+
+.idiomHighlightIcon {
+  font-size: 1.6rem;
+  flex-shrink: 0;
+}
+
+.idiomHighlightTitle {
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: #b45309;
+  margin: 0;
+}
+
+.idiomHighlightSub {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #d97706;
+  margin: 2px 0 0;
+}

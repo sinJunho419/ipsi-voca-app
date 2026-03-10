@@ -19,6 +19,8 @@ interface ReportData {
     wins: number
     winRate: number
     masteredCount: number
+    masteredWordCount: number
+    masteredIdiomCount: number
     topRivalId: string | null
     topRivalName: string | null
     topRivalCount: number
@@ -92,12 +94,31 @@ export default function ReportClient() {
             const wins = myBattles.filter(b => b.winner_id === user.id).length
             const winRate = totalBattles > 0 ? Math.round((wins / totalBattles) * 100) : 0
 
-            // 졸업 단어 수
+            // 졸업 단어 수 (전체)
             const { count: masteredCount } = await supabase
                 .from('wrong_answers')
                 .select('*', { count: 'exact', head: true })
                 .eq('user_id', user.id)
                 .eq('status', 'Mastered')
+
+            // 졸업 단어 중 숙어 수 (word_id → words.type = 'idiom')
+            const { data: masteredRows } = await supabase
+                .from('wrong_answers')
+                .select('word_id')
+                .eq('user_id', user.id)
+                .eq('status', 'Mastered')
+
+            let masteredIdiomCount = 0
+            if (masteredRows && masteredRows.length > 0) {
+                const masteredIds = masteredRows.map(r => r.word_id)
+                const { count: idiomCount } = await supabase
+                    .from('words')
+                    .select('*', { count: 'exact', head: true })
+                    .in('id', masteredIds)
+                    .eq('type', 'idiom')
+                masteredIdiomCount = idiomCount || 0
+            }
+            const masteredWordCount = (masteredCount || 0) - masteredIdiomCount
 
             // 최다 대전 상대
             const rivalCounts: Record<string, number> = {}
@@ -132,6 +153,8 @@ export default function ReportClient() {
             setReport({
                 totalBattles, wins, winRate,
                 masteredCount: masteredCount || 0,
+                masteredWordCount,
+                masteredIdiomCount,
                 topRivalId, topRivalName, topRivalCount,
                 dailyActivity, totalActivity,
             })
@@ -258,7 +281,7 @@ export default function ReportClient() {
                 <div className={styles.statBox}>
                     <BookCheck size={20} className={styles.statIconGreen} />
                     <span className={styles.statValue}>{report.masteredCount}</span>
-                    <span className={styles.statLabel}>졸업 단어</span>
+                    <span className={styles.statLabel}>졸업 (누적)</span>
                 </div>
                 <div className={styles.statBox}>
                     <Flame size={20} className={styles.statIconOrange} />
@@ -266,6 +289,16 @@ export default function ReportClient() {
                     <span className={styles.statLabel}>총 활동</span>
                 </div>
             </div>
+            {/* 숙어 정복 하이라이트 */}
+            {report.masteredIdiomCount > 0 && (
+                <div className={styles.idiomHighlight}>
+                    <span className={styles.idiomHighlightIcon}>🔗</span>
+                    <div>
+                        <p className={styles.idiomHighlightTitle}>정복한 숙어: {report.masteredIdiomCount}개</p>
+                        <p className={styles.idiomHighlightSub}>단어 {report.masteredWordCount}개 + 숙어 {report.masteredIdiomCount}개 졸업!</p>
+                    </div>
+                </div>
+            )}
         </div>,
 
         // 1: 요일별 활동 차트
@@ -393,8 +426,13 @@ export default function ReportClient() {
                 </div>
                 <div className={styles.achieveBox}>
                     <BookCheck size={28} style={{ color: '#10b981' }} />
-                    <span className={styles.achieveValue}>{report.masteredCount}개</span>
-                    <span className={styles.achieveLabel}>졸업 단어 (누적)</span>
+                    <span className={styles.achieveValue}>{report.masteredWordCount}개</span>
+                    <span className={styles.achieveLabel}>졸업 단어</span>
+                </div>
+                <div className={styles.achieveBox}>
+                    <span style={{ fontSize: '1.6rem' }}>🔗</span>
+                    <span className={styles.achieveValue}>{report.masteredIdiomCount}개</span>
+                    <span className={styles.achieveLabel}>정복 숙어</span>
                 </div>
             </div>
         </div>,
