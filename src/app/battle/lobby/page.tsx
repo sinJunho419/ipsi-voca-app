@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
 import type { Level } from '@/types/vocabulary'
+import { getSetLabel } from '@/lib/setAliases'
 import styles from './lobby.module.css'
 
 const LEVELS: { value: Level; label: string }[] = [
@@ -36,7 +37,8 @@ async function getUserId(supabase: ReturnType<typeof createClient>) {
 
 interface BattleConfig {
     level: Level
-    selectedSets: number[]
+    selectedWordSets: number[]
+    selectedIdiomSets: number[]
     questionCount: number
 }
 
@@ -51,11 +53,14 @@ function BattleCreateSettings({ onCancel, onCreate, creating, errorMsg }: {
 }) {
     const supabase = createClient()
     const [level, setLevel] = useState<Level>('elem_3')
-    const [availableSets, setAvailableSets] = useState<number[]>([])
-    const [selectedSets, setSelectedSets] = useState<number[]>([])
+    const [wordSets, setWordSets] = useState<number[]>([])
+    const [idiomSets, setIdiomSets] = useState<number[]>([])
+    const [selectedWordSets, setSelectedWordSets] = useState<number[]>([])
+    const [selectedIdiomSets, setSelectedIdiomSets] = useState<number[]>([])
     const [questionCount, setQuestionCount] = useState(10)
     const [isLoading, setIsLoading] = useState(true)
 
+    const totalSelected = selectedWordSets.length + selectedIdiomSets.length
     const pointPerQ = (100 / questionCount).toFixed(1).replace(/\.0$/, '')
 
     useEffect(() => {
@@ -64,32 +69,45 @@ function BattleCreateSettings({ onCancel, onCreate, creating, errorMsg }: {
             setIsLoading(true)
             const { data } = await supabase
                 .from('words')
-                .select('set_no')
+                .select('set_no, type')
                 .eq('level', level)
                 .order('set_no', { ascending: true })
 
             if (cancelled) return
-            const uniqueSets = [...new Set((data || []).map(d => d.set_no))].sort((a, b) => a - b)
-            setAvailableSets(uniqueSets)
-            setSelectedSets([])
+            const rows = data || []
+            const wSets = [...new Set(rows.filter(d => d.type !== 'idiom').map(d => d.set_no))].sort((a, b) => a - b)
+            const iSets = [...new Set(rows.filter(d => d.type === 'idiom').map(d => d.set_no))].sort((a, b) => a - b)
+            setWordSets(wSets)
+            setIdiomSets(iSets)
+            setSelectedWordSets([])
+            setSelectedIdiomSets([])
             setIsLoading(false)
         }
         fetchSets()
         return () => { cancelled = true }
     }, [level, supabase])
 
-    function toggleSet(setNo: number) {
-        setSelectedSets(prev =>
-            prev.includes(setNo)
-                ? prev.filter(s => s !== setNo)
-                : [...prev, setNo].sort((a, b) => a - b)
+    function toggleWordSet(setNo: number) {
+        setSelectedWordSets(prev =>
+            prev.includes(setNo) ? prev.filter(s => s !== setNo) : [...prev, setNo].sort((a, b) => a - b)
+        )
+    }
+
+    function toggleIdiomSet(setNo: number) {
+        setSelectedIdiomSets(prev =>
+            prev.includes(setNo) ? prev.filter(s => s !== setNo) : [...prev, setNo].sort((a, b) => a - b)
         )
     }
 
     function selectAll() {
-        setSelectedSets(
-            selectedSets.length === availableSets.length ? [] : [...availableSets]
-        )
+        const allSelected = selectedWordSets.length === wordSets.length && selectedIdiomSets.length === idiomSets.length
+        if (allSelected) {
+            setSelectedWordSets([])
+            setSelectedIdiomSets([])
+        } else {
+            setSelectedWordSets([...wordSets])
+            setSelectedIdiomSets([...idiomSets])
+        }
     }
 
     return (
@@ -133,31 +151,58 @@ function BattleCreateSettings({ onCancel, onCreate, creating, errorMsg }: {
                 <div className={styles.settingLabelRow}>
                     <label className={styles.settingLabel}>
                         세트 선택
-                        {selectedSets.length > 0 && (
-                            <span className={styles.selectedCount}>{selectedSets.length}개</span>
+                        {totalSelected > 0 && (
+                            <span className={styles.selectedCount}>{totalSelected}개</span>
                         )}
                     </label>
                     <button className={styles.selectAllBtn} onClick={selectAll}>
-                        {selectedSets.length === availableSets.length ? '전체 해제' : '전체 선택'}
+                        {selectedWordSets.length === wordSets.length && selectedIdiomSets.length === idiomSets.length ? '전체 해제' : '전체 선택'}
                     </button>
                 </div>
 
                 {isLoading ? (
                     <div className={styles.setsLoading}>불러오는 중…</div>
-                ) : availableSets.length === 0 ? (
+                ) : wordSets.length === 0 && idiomSets.length === 0 ? (
                     <div className={styles.setsLoading}>세트가 없습니다</div>
                 ) : (
-                    <div className={styles.setsGrid}>
-                        {availableSets.map(setNo => (
-                            <button
-                                key={setNo}
-                                className={`${styles.setChip} ${selectedSets.includes(setNo) ? styles.setChipActive : ''}`}
-                                onClick={() => toggleSet(setNo)}
-                            >
-                                Set {setNo}
-                            </button>
-                        ))}
-                    </div>
+                    <>
+                        {wordSets.length > 0 && (
+                            <>
+                                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#6366f1', margin: '0.3rem 0 0.2rem' }}>
+                                    단어 세트
+                                </div>
+                                <div className={styles.setsGrid}>
+                                    {wordSets.map(setNo => (
+                                        <button
+                                            key={`w-${setNo}`}
+                                            className={`${styles.setChip} ${selectedWordSets.includes(setNo) ? styles.setChipActive : ''}`}
+                                            onClick={() => toggleWordSet(setNo)}
+                                        >
+                                            Set {setNo}
+                                        </button>
+                                    ))}
+                                </div>
+                            </>
+                        )}
+                        {idiomSets.length > 0 && (
+                            <>
+                                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#d97706', margin: '0.5rem 0 0.2rem' }}>
+                                    숙어 세트
+                                </div>
+                                <div className={styles.setsGrid}>
+                                    {idiomSets.map(setNo => (
+                                        <button
+                                            key={`i-${setNo}`}
+                                            className={`${styles.setChip} ${selectedIdiomSets.includes(setNo) ? styles.setChipActive : ''}`}
+                                            onClick={() => toggleIdiomSet(setNo)}
+                                        >
+                                            {getSetLabel('idiom', level, setNo)}
+                                        </button>
+                                    ))}
+                                </div>
+                            </>
+                        )}
+                    </>
                 )}
             </div>
 
@@ -185,8 +230,8 @@ function BattleCreateSettings({ onCancel, onCreate, creating, errorMsg }: {
                 </button>
                 <button
                     className={styles.btnStart}
-                    disabled={selectedSets.length === 0 || creating}
-                    onClick={() => onCreate({ level, selectedSets, questionCount })}
+                    disabled={totalSelected === 0 || creating}
+                    onClick={() => onCreate({ level, selectedWordSets, selectedIdiomSets, questionCount })}
                 >
                     {creating ? '생성 중…' : '배틀 방 입장'}
                 </button>
@@ -214,14 +259,27 @@ function LobbyContent() {
 
             const hostId = await getUserId(supabase)
 
-            // 선택된 세트에서 단어 가져오기
-            const { data: words } = await supabase
-                .from('words')
-                .select('id')
-                .eq('level', config.level)
-                .in('set_no', config.selectedSets)
+            // 선택된 단어/숙어 세트에서 ID 가져오기
+            const queries = []
+            if (config.selectedWordSets.length > 0) {
+                queries.push(
+                    supabase.from('words').select('id')
+                        .eq('level', config.level)
+                        .in('set_no', config.selectedWordSets)
+                        .neq('type', 'idiom')
+                )
+            }
+            if (config.selectedIdiomSets.length > 0) {
+                queries.push(
+                    supabase.from('words').select('id')
+                        .eq('level', config.level)
+                        .in('set_no', config.selectedIdiomSets)
+                        .eq('type', 'idiom')
+                )
+            }
 
-            const wordIds = words?.map(w => w.id) || []
+            const results = await Promise.all(queries)
+            const wordIds = results.flatMap(r => (r.data || []).map(w => w.id))
 
             if (wordIds.length === 0) {
                 setErrorMsg('선택한 세트에 단어가 없습니다.')
@@ -236,6 +294,7 @@ function LobbyContent() {
 
             const sliced = wordIds.slice(0, config.questionCount)
             const roomCode = generateRoomCode()
+            const firstSetNo = config.selectedWordSets[0] ?? config.selectedIdiomSets[0] ?? 1
 
             // 서버 API로 방 생성 (service role → RLS 우회)
             const res = await fetch('/api/battle', {
@@ -246,8 +305,7 @@ function LobbyContent() {
                     roomCode,
                     hostId,
                     level: config.level,
-                    setNo: config.selectedSets[0],
-                    selectedSets: config.selectedSets,
+                    setNo: firstSetNo,
                     questionIds: sliced,
                     questionCount: config.questionCount,
                 }),

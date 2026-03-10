@@ -24,6 +24,7 @@ interface QuizQuestion {
     word: Word
     options: string[]
     correct: string
+    isIdiom: boolean
 }
 
 function shuffle<T>(arr: T[]): T[] {
@@ -36,8 +37,18 @@ function buildQuiz(words: Word[]): QuizQuestion[] {
         const correct = word.mean_1
         const wrongs = shuffle(allMeanings.filter(m => m !== correct)).slice(0, 3)
         while (wrongs.length < 3) wrongs.push('(없음)')
-        return { word, options: shuffle([correct, ...wrongs]), correct }
+        const isIdiom = word.type === 'idiom'
+        return { word, options: shuffle([correct, ...wrongs]), correct, isIdiom }
     })
+}
+
+/** 문제 타입 + 레벨에 따른 타이머(초) 산정 */
+function getTimerSec(word: Word): number {
+    if (word.type === 'idiom') {
+        const lv = word.level || ''
+        return lv.startsWith('high') ? 10 : 8
+    }
+    return 4
 }
 
 const spring: Transition = { type: 'spring', stiffness: 420, damping: 30 }
@@ -130,7 +141,9 @@ export default function QuizClient({ words, onExit, onFinish }: Props) {
     const current = quiz[index]
     if (!current) return null
 
-    // 4초 타임아웃 → 오답 처리 + 자동 넘기기
+    const timerDuration = getTimerSec(current.word)
+
+    // 타임아웃 → 오답 처리 + 자동 넘기기
     function handleTimeout() {
         if (selected !== null || quizState !== 'playing') return
         wrongWordIdsRef.current.push(current.word.id)
@@ -214,12 +227,23 @@ export default function QuizClient({ words, onExit, onFinish }: Props) {
                 <span className={styles.progressText}>{index + 1} / {quiz.length}</span>
             </div>
 
-            {/* 4초 타이머 */}
+            {/* 타입 배지 + 동적 타이머 */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                <motion.span
+                    key={current.isIdiom ? 'idiom' : 'word'}
+                    className={`${styles.typeBadge} ${current.isIdiom ? styles.typeBadgeIdiom : styles.typeBadgeWord}`}
+                    initial={{ scale: 0.7, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ type: 'spring', stiffness: 500, damping: 25 }}
+                >
+                    {current.isIdiom ? '🔗 숙어' : '📝 단어'} · {timerDuration}초
+                </motion.span>
+            </div>
             <QuizTimerBar
                 onTimeout={handleTimeout}
                 resetTrigger={timerReset}
                 stopped={selected !== null}
-                totalTimeSec={4}
+                totalTimeSec={timerDuration}
             />
 
             {/* 문제 카드 */}
@@ -232,7 +256,9 @@ export default function QuizClient({ words, onExit, onFinish }: Props) {
                     exit={{ opacity: 0, x: -30 }}
                     transition={spring}
                 >
-                    <p className={styles.quizWord}>{current.word.word}</p>
+                    <p className={`${styles.quizWord} ${current.isIdiom ? styles.quizWordIdiom : ''}`}>
+                        {current.word.word}
+                    </p>
                 </motion.div>
             </AnimatePresence>
 

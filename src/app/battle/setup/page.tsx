@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
 import type { Level, Word } from '@/types/vocabulary'
+import { getSetLabel } from '@/lib/setAliases'
 import styles from './setup.module.css'
 
 // ── 상수 ──────────────────────────────────────────────────────
@@ -40,10 +41,12 @@ function SetupContent() {
     // 학년 선택
     const [level, setLevel] = useState<Level>('elem_3')
     // 해당 학년에서 사용 가능한 세트 번호 목록
-    const [availableSets, setAvailableSets] = useState<number[]>([])
+    const [wordSets, setWordSets] = useState<number[]>([])
+    const [idiomSets, setIdiomSets] = useState<number[]>([])
     const [setsLoading, setSetsLoading] = useState(false)
     // 선택된 세트 번호들 (다중 선택)
-    const [selectedSets, setSelectedSets] = useState<number[]>([])
+    const [selectedWordSets, setSelectedWordSets] = useState<number[]>([])
+    const [selectedIdiomSets, setSelectedIdiomSets] = useState<number[]>([])
     // 문항수
     const [questionCount, setQuestionCount] = useState<10 | 20 | 30>(10)
     // 문항당 배점
@@ -60,24 +63,28 @@ function SetupContent() {
     // ── 학년 바뀌면 세트 목록 로드 ────────────────────────────
     useEffect(() => {
         setSetsLoading(true)
-        setSelectedSets([])
+        setSelectedWordSets([])
+        setSelectedIdiomSets([])
         setFetchError('')
 
         const supabaseFetch = async () => {
             const { data, error } = await supabase
                 .from('words')
-                .select('set_no')
+                .select('set_no, type')
                 .eq('level', level)
                 .order('set_no', { ascending: true })
 
             if (error || !data) {
-                setAvailableSets([])
+                setWordSets([])
+                setIdiomSets([])
                 setSetsLoading(false)
                 return
             }
 
-            const unique = Array.from(new Set(data.map(d => d.set_no))) as number[]
-            setAvailableSets(unique)
+            const wSets = [...new Set(data.filter(d => d.type !== 'idiom').map(d => d.set_no))].sort((a, b) => a - b)
+            const iSets = [...new Set(data.filter(d => d.type === 'idiom').map(d => d.set_no))].sort((a, b) => a - b)
+            setWordSets(wSets)
+            setIdiomSets(iSets)
             setSetsLoading(false)
         }
 
@@ -85,16 +92,20 @@ function SetupContent() {
     }, [level])  // eslint-disable-line react-hooks/exhaustive-deps
 
     // ── 세트 토글 (체크박스 다중 선택) ───────────────────────
-    function toggleSet(setNo: number) {
-        setSelectedSets(prev =>
-            prev.includes(setNo)
-                ? prev.filter(s => s !== setNo)
-                : [...prev, setNo].sort((a, b) => a - b)
+    function toggleWordSet(setNo: number) {
+        setSelectedWordSets(prev =>
+            prev.includes(setNo) ? prev.filter(s => s !== setNo) : [...prev, setNo].sort((a, b) => a - b)
+        )
+    }
+    function toggleIdiomSet(setNo: number) {
+        setSelectedIdiomSets(prev =>
+            prev.includes(setNo) ? prev.filter(s => s !== setNo) : [...prev, setNo].sort((a, b) => a - b)
         )
     }
 
     // ── 유효성: 세트가 1개 이상 선택돼야 시작 가능 ────────────
-    const isValid = selectedSets.length > 0
+    const isValid = selectedWordSets.length + selectedIdiomSets.length > 0
+    const selectedSetsCount = selectedWordSets.length + selectedIdiomSets.length
     const totalScore = questionCount * pointsPerQ
 
     // ── 배틀 시작 (방 생성 → 바로 대기실로) ───────────────────
@@ -110,20 +121,36 @@ function SetupContent() {
                 return
             }
 
-            // 선택된 모든 세트 단어 한 번에 가져오기
-            const { data, error } = await supabase
-                .from('words')
-                .select('*')
-                .eq('level', level)
-                .in('set_no', selectedSets)
-                .order('id')
+            // 선택된 단어/숙어 세트에서 데이터 가져오기
+            const queries = []
+            if (selectedWordSets.length > 0) {
+                queries.push(
+                    supabase.from('words').select('*')
+                        .eq('level', level)
+                        .in('set_no', selectedWordSets)
+                        .neq('type', 'idiom')
+                        .order('id')
+                )
+            }
+            if (selectedIdiomSets.length > 0) {
+                queries.push(
+                    supabase.from('words').select('*')
+                        .eq('level', level)
+                        .in('set_no', selectedIdiomSets)
+                        .eq('type', 'idiom')
+                        .order('id')
+                )
+            }
 
-            if (error || !data || data.length === 0) {
+            const results = await Promise.all(queries)
+            const allData = results.flatMap(r => r.data || [])
+
+            if (allData.length === 0) {
                 setFetchError('단어 데이터를 불러오지 못했습니다. 다시 시도해주세요.')
                 return
             }
 
-            const words = data as Word[]
+            const words = allData as Word[]
 
             // 단어 수가 문항수보다 적으면 전체 사용
             const count = Math.min(questionCount, words.length)
@@ -134,7 +161,8 @@ function SetupContent() {
                 'battleSetup',
                 JSON.stringify({
                     level,
-                    selectedSets,
+                    selectedWordSets,
+                    selectedIdiomSets,
                     questionCount,
                     pointsPerQ,
                     totalScore,
@@ -154,7 +182,7 @@ function SetupContent() {
                     room_code: roomCode,
                     host_id: user.id,
                     level,
-                    set_no: selectedSets[0],
+                    set_no: selectedWordSets[0] ?? selectedIdiomSets[0] ?? 1,
                     status: 'waiting',
                     max_players: maxPlayers,
                     expires_at: expiresAt,
@@ -223,30 +251,64 @@ function SetupContent() {
                                 <div key={i} className={styles.setLoadingItem} />
                             ))}
                         </div>
-                    ) : availableSets.length === 0 ? (
+                    ) : wordSets.length === 0 && idiomSets.length === 0 ? (
                         <p style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
                             세트 데이터가 없습니다.
                         </p>
                     ) : (
-                        <div className={styles.setGrid}>
-                            {availableSets.map(setNo => (
-                                <div className={styles.setChk} key={setNo}>
-                                    <input
-                                        type="checkbox"
-                                        id={`set-${setNo}`}
-                                        checked={selectedSets.includes(setNo)}
-                                        onChange={() => toggleSet(setNo)}
-                                    />
-                                    <label htmlFor={`set-${setNo}`}>
-                                        {setNo}
-                                    </label>
-                                </div>
-                            ))}
-                        </div>
+                        <>
+                            {wordSets.length > 0 && (
+                                <>
+                                    <p style={{ fontSize: '0.78rem', fontWeight: 700, color: '#6366f1', margin: '0.3rem 0 0.2rem' }}>단어 세트</p>
+                                    <div className={styles.setGrid}>
+                                        {wordSets.map(setNo => (
+                                            <div className={styles.setChk} key={`w-${setNo}`}>
+                                                <input
+                                                    type="checkbox"
+                                                    id={`wset-${setNo}`}
+                                                    checked={selectedWordSets.includes(setNo)}
+                                                    onChange={() => toggleWordSet(setNo)}
+                                                />
+                                                <label htmlFor={`wset-${setNo}`}>
+                                                    {setNo}
+                                                </label>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </>
+                            )}
+                            {idiomSets.length > 0 && (
+                                <>
+                                    <p style={{ fontSize: '0.78rem', fontWeight: 700, color: '#d97706', margin: '0.5rem 0 0.2rem' }}>숙어 세트</p>
+                                    <div className={styles.setGrid}>
+                                        {idiomSets.map(setNo => (
+                                            <div className={styles.setChk} key={`i-${setNo}`}>
+                                                <input
+                                                    type="checkbox"
+                                                    id={`iset-${setNo}`}
+                                                    checked={selectedIdiomSets.includes(setNo)}
+                                                    onChange={() => toggleIdiomSet(setNo)}
+                                                />
+                                                <label htmlFor={`iset-${setNo}`}>
+                                                    {getSetLabel('idiom', level, setNo)}
+                                                </label>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </>
+                            )}
+                        </>
                     )}
 
                     <p className={styles.selectionInfo}>
-                        {selectedSets.length > 0 && `Set ${selectedSets.join(', ')} 선택됨 (${selectedSets.length}개)`}
+                        {(selectedWordSets.length + selectedIdiomSets.length) > 0 && (
+                            <>
+                                {selectedWordSets.length > 0 && `단어 Set ${selectedWordSets.join(', ')}`}
+                                {selectedWordSets.length > 0 && selectedIdiomSets.length > 0 && ' / '}
+                                {selectedIdiomSets.length > 0 && `숙어 Set ${selectedIdiomSets.join(', ')}`}
+                                {` (${selectedWordSets.length + selectedIdiomSets.length}개)`}
+                            </>
+                        )}
                     </p>
                 </section>
 

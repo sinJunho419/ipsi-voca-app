@@ -36,6 +36,7 @@ interface QuizQuestion {
     correct: string
     useSentence: boolean
     sentenceWithBlank: string | null
+    isIdiom: boolean
 }
 
 interface LeaderEntry {
@@ -73,7 +74,8 @@ function buildQuiz(words: Word[]): QuizQuestion[] {
                 new RegExp(word.word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), '____')
             : null
 
-        return { word, options, correct, useSentence: !!sentenceWithBlank, sentenceWithBlank }
+        const isIdiom = word.type === 'idiom'
+        return { word, options, correct, useSentence: !!sentenceWithBlank, sentenceWithBlank, isIdiom }
     })
 }
 
@@ -98,6 +100,16 @@ function renderSentenceWithBlank(sentence: string) {
             )}
         </span>
     ))
+}
+
+/** 문제 타입 + 레벨에 따른 타이머(초) 산정 */
+function getTimerSec(word: Word, useSentence: boolean): number {
+    if (word.type === 'idiom') {
+        // 고등 숙어: 10초, 그 외 숙어: 8초
+        const lv = word.level || ''
+        return lv.startsWith('high') ? 10 : 8
+    }
+    return useSentence ? 8 : 4
 }
 
 const spring: Transition = { type: 'spring', stiffness: 420, damping: 30 }
@@ -321,7 +333,7 @@ export default function BattleClient({ room, myId }: Props) {
     useEffect(() => {
         if (quizState !== 'playing' || quiz.length === 0) return
         const current = quiz[index]
-        startTimer(current?.useSentence ? 8 : 4)
+        startTimer(current ? getTimerSec(current.word, current.useSentence) : 4)
         return () => stopTimer()
     }, [index, quizState, quiz, startTimer, stopTimer])
 
@@ -489,6 +501,7 @@ export default function BattleClient({ room, myId }: Props) {
     const current = quiz[index]
     const total = quiz.length
     const timerColor = timerProgress > 50 ? '#4ade80' : timerProgress > 25 ? '#facc15' : '#ef4444'
+    const timerDuration = current ? getTimerSec(current.word, current.useSentence) : 4
 
     // 리더보드 계산
     const leaderboard: LeaderEntry[] = Object.entries(scores)
@@ -666,6 +679,16 @@ export default function BattleClient({ room, myId }: Props) {
                         />
                     </div>
                 </div>
+                {/* 타입 배지: 단어/숙어 */}
+                <motion.div
+                    key={current.isIdiom ? 'idiom' : 'word'}
+                    className={`${styles.typeBadge} ${current.isIdiom ? styles.typeBadgeIdiom : styles.typeBadgeWord}`}
+                    initial={{ scale: 0.7, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ type: 'spring', stiffness: 500, damping: 25 }}
+                >
+                    {current.isIdiom ? '🔗 숙어' : '📝 단어'} · {timerDuration}초
+                </motion.div>
                 {isRevenge && (
                     <div className={styles.revengeBadge}>
                         <Swords size={12} /> 리벤지
@@ -714,10 +737,10 @@ export default function BattleClient({ room, myId }: Props) {
                 </div>
                 <div className={styles.timerLabel}>
                     <span className={styles.timerIcon}>
-                        <Timer size={12} /> {current?.useSentence ? '8초' : '4초'}
+                        <Timer size={12} /> {timerDuration}초
                     </span>
                     <span className={`${styles.timerCount} ${timerProgress <= 25 ? styles.timerCountUrgent : ''}`}>
-                        {Math.ceil((timerProgress / 100) * (current?.useSentence ? 8 : 4))}초
+                        {Math.ceil((timerProgress / 100) * timerDuration)}초
                     </span>
                 </div>
             </div>
@@ -747,8 +770,12 @@ export default function BattleClient({ room, myId }: Props) {
                             </>
                         ) : (
                             <>
-                                <p className={styles.sentenceLabel}>Q. 다음 단어의 뜻은?</p>
-                                <h2 className={styles.questionWord}>{current.word.word}</h2>
+                                <p className={styles.sentenceLabel}>
+                                    Q. 다음 {current.isIdiom ? '숙어' : '단어'}의 뜻은?
+                                </p>
+                                <h2 className={`${styles.questionWord} ${current.isIdiom ? styles.questionWordIdiom : ''}`}>
+                                    {current.word.word}
+                                </h2>
                             </>
                         )}
                     </motion.div>

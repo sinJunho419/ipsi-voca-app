@@ -1,6 +1,9 @@
 /** words 테이블의 레벨 */
 export type Level = 'elem_3' | 'elem_4' | 'elem_5' | 'elem_6' | 'mid_1' | 'mid_2' | 'mid_3' | 'high_1' | 'high_2'
 
+/** 단어 타입 (word / idiom) */
+export type WordType = 'word' | 'idiom'
+
 /** words 테이블 행 타입 */
 export interface Word {
     id: number

@@ -4,6 +4,7 @@ import { useState, useCallback, useTransition, useEffect, useRef } from 'react'
 import { motion, AnimatePresence, type Transition } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
 import type { Word, Level } from '@/types/vocabulary'
+import { getSetLabel } from '@/lib/setAliases'
 import styles from './study.module.css'
 import { useRouter } from 'next/navigation'
 import QuizClient from './QuizClient'
@@ -49,7 +50,8 @@ export default function StudyClient({ initialWords, initialMaxSet }: Props) {
     const [tab, setTab] = useState<Tab>('study')
     const [level, setLevel] = useState<Level | null>(null)
     const [setNo, setSetNo] = useState<number | null>(null)
-    const [availableSets, setAvailableSets] = useState<number[]>([])
+    const [setType, setSetType] = useState<string>('word')
+    const [availableSets, setAvailableSets] = useState<{ setNo: number; type: string }[]>([])
     const [words, setWords] = useState<Word[]>([])
     const isReady = level !== null && setNo !== null
 
@@ -57,7 +59,7 @@ export default function StudyClient({ initialWords, initialMaxSet }: Props) {
     const [successCount, setSuccessCount] = useState(0)
     const [medalCount, setMedalCount] = useState(0)
 
-    const progressKey = level && setNo !== null ? `progress_${level}_${setNo}` : null
+    const progressKey = level && setNo !== null ? `progress_${level}_${setType}_${setNo}` : null
 
     // level+set 변경 시 저장된 성공/메달 불러오기
     useEffect(() => {
@@ -126,7 +128,7 @@ export default function StudyClient({ initialWords, initialMaxSet }: Props) {
         startTransition(async () => {
             const { data: rangeData } = await supabase
                 .from('words')
-                .select('set_no')
+                .select('set_no, type')
                 .eq('level', newLevel)
                 .order('set_no', { ascending: true })
 
@@ -135,18 +137,35 @@ export default function StudyClient({ initialWords, initialMaxSet }: Props) {
                 return
             }
 
-            const uniqueSets = Array.from(new Set(rangeData.map(d => d.set_no)))
-            setAvailableSets(uniqueSets)
+            // (set_no, type) 쌍으로 중복 제거
+            const seen = new Set<string>()
+            const sets: { setNo: number; type: string }[] = []
+            for (const d of rangeData) {
+                const key = `${d.type}:${d.set_no}`
+                if (!seen.has(key)) {
+                    seen.add(key)
+                    sets.push({ setNo: d.set_no, type: d.type || 'word' })
+                }
+            }
+            setAvailableSets(sets)
         })
     }
 
     const changeSet = useCallback(async (val: string) => {
         if (!val || !level) return
-        const newSetNo = Number(val)
+        // val 형식: "word:1" 또는 "idiom:2"
+        const [type, no] = val.split(':')
+        const newSetNo = Number(no)
         setSetNo(newSetNo)
+        setSetType(type)
         startTransition(async () => {
-            const { data } = await supabase
-                .from('words').select('*').eq('level', level).eq('set_no', newSetNo).order('id')
+            let query = supabase.from('words').select('*').eq('level', level).eq('set_no', newSetNo)
+            if (type === 'idiom') {
+                query = query.eq('type', 'idiom')
+            } else {
+                query = query.neq('type', 'idiom')
+            }
+            const { data } = await query.order('id')
             setWords((data ?? []) as Word[])
             prevIndexRef.current = -1
             setCurrentIndex(0)
@@ -177,11 +196,30 @@ export default function StudyClient({ initialWords, initialMaxSet }: Props) {
                             <option value="" disabled>학년 선택</option>
                             {LEVELS.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
                         </select>
-                        <select value={setNo ?? ''} onChange={e => changeSet(e.target.value)} disabled={isPending || !level}>
+                        <select value={setNo !== null ? `${setType}:${setNo}` : ''} onChange={e => changeSet(e.target.value)} disabled={isPending || !level}>
                             <option value="" disabled>Set 선택</option>
-                            {availableSets.map(n => (
-                                <option key={n} value={n}>Set {n}</option>
-                            ))}
+                            {(() => {
+                                const wSets = availableSets.filter(s => s.type !== 'idiom')
+                                const iSets = availableSets.filter(s => s.type === 'idiom')
+                                return (
+                                    <>
+                                        {wSets.length > 0 && (
+                                            <optgroup label="단어 세트">
+                                                {wSets.map(s => (
+                                                    <option key={`w-${s.setNo}`} value={`word:${s.setNo}`}>{getSetLabel('word', level!, s.setNo)}</option>
+                                                ))}
+                                            </optgroup>
+                                        )}
+                                        {iSets.length > 0 && (
+                                            <optgroup label="숙어 세트">
+                                                {iSets.map(s => (
+                                                    <option key={`i-${s.setNo}`} value={`idiom:${s.setNo}`}>{getSetLabel('idiom', level!, s.setNo)}</option>
+                                                ))}
+                                            </optgroup>
+                                        )}
+                                    </>
+                                )
+                            })()}
                         </select>
                     </div>
 
@@ -299,7 +337,11 @@ export default function StudyClient({ initialWords, initialMaxSet }: Props) {
                                     >
                                         {/* 앞면 */}
                                         <div className={`${styles.cardFace} ${styles.cardFront}`}>
-                                            <span className={styles.wordText}>{current.word}</span>
+                                            <span className={styles.wordText} style={
+                                                current.type === 'idiom'
+                                                    ? { fontSize: '1.6rem', whiteSpace: 'normal', wordBreak: 'keep-all', lineHeight: 1.4, textAlign: 'center' }
+                                                    : undefined
+                                            }>{current.word}</span>
                                             <motion.button
                                                 className={styles.speakBtn}
                                                 onClick={e => { e.stopPropagation(); speak(current.word) }}

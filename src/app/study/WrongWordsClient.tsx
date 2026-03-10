@@ -29,6 +29,16 @@ interface RevengeQuestion {
 type Mode = 'list' | 'revenge'
 type QuizState = 'playing' | 'wrong' | 'finished'
 type ListFilter = 'all' | 'danger' | 'near_grad' | 'graduated'
+type TypeFilter = 'all' | 'word' | 'idiom'
+
+/** 문제 타입 + 레벨에 따른 타이머(초) 산정 */
+function getTimerSec(word: Word): number {
+    if (word.type === 'idiom') {
+        const lv = word.level || ''
+        return lv.startsWith('high') ? 10 : 8
+    }
+    return 4
+}
 
 function speak(word: string) {
     if (typeof window === 'undefined' || !window.speechSynthesis) return
@@ -57,6 +67,7 @@ export default function WrongWordsClient({ onExit }: Props) {
     const [mode, setMode] = useState<Mode>('list')
     const [creatingBattle, setCreatingBattle] = useState(false)
     const [listFilter, setListFilter] = useState<ListFilter>('all')
+    const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
 
     // Revenge quiz state
     const [quiz, setQuiz] = useState<RevengeQuestion[]>([])
@@ -202,8 +213,16 @@ export default function WrongWordsClient({ onExit }: Props) {
         setIsLoading(false)
     }
 
+    // 타입 필터 적용된 오답 목록
+    const typeFilteredWrongWords = wrongWords.filter(e => {
+        if (typeFilter === 'word') return e.word.type !== 'idiom'
+        if (typeFilter === 'idiom') return e.word.type === 'idiom'
+        return true
+    })
+
     async function startRevengeQuiz() {
-        if (wrongWords.length < 4) return
+        const quizPool = typeFilteredWrongWords.length >= 4 ? typeFilteredWrongWords : wrongWords
+        if (quizPool.length < 4) return
 
         // 오답 옵션용 단어 가져오기
         const { data: randomWords } = await supabase
@@ -213,7 +232,7 @@ export default function WrongWordsClient({ onExit }: Props) {
 
         const allMeanings = Array.from(new Set((randomWords || []).map(w => w.mean_1)))
 
-        const shuffled = [...wrongWords].sort(() => Math.random() - 0.5)
+        const shuffled = [...quizPool].sort(() => Math.random() - 0.5)
 
         const questions: RevengeQuestion[] = shuffled.map(entry => {
             const correct = entry.word.mean_1
@@ -391,7 +410,7 @@ export default function WrongWordsClient({ onExit }: Props) {
                     {graduated.length > 0 && (
                         <div className={styles.graduatedBox}>
                             <p className={styles.graduatedTitle}>
-                                <CheckCircle2 size={18} style={{ verticalAlign: '-3px' }} /> 졸업한 단어 ({graduated.length}개)
+                                <CheckCircle2 size={18} style={{ verticalAlign: '-3px' }} /> 졸업 ({graduated.length}개)
                             </p>
                             <div className={styles.graduatedList}>
                                 {graduated.map(w => (
@@ -426,6 +445,8 @@ export default function WrongWordsClient({ onExit }: Props) {
 
         const progress = (index / quiz.length) * 100
         const currentConsecutive = consecutiveMap[current.entry.word_id] || 0
+        const isIdiom = current.entry.word.type === 'idiom'
+        const timerDuration = getTimerSec(current.entry.word)
 
         return (
             <div className={styles.quiz}>
@@ -438,9 +459,22 @@ export default function WrongWordsClient({ onExit }: Props) {
                     <span className={styles.progressText}>{index + 1} / {quiz.length}</span>
                 </div>
 
+                {/* 타입 배지 + 동적 타이머 */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                    <motion.span
+                        key={isIdiom ? 'idiom' : 'word'}
+                        className={`${styles.typeBadge} ${isIdiom ? styles.typeBadgeIdiom : styles.typeBadgeWord}`}
+                        initial={{ scale: 0.7, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        transition={{ type: 'spring', stiffness: 500, damping: 25 }}
+                    >
+                        {isIdiom ? '🔗 숙어' : '📝 단어'} · {timerDuration}초
+                    </motion.span>
+                </div>
+
                 {/* 타이머 */}
                 <QuizTimerBar onTimeout={handleTimeout} resetTrigger={timerReset}
-                    stopped={selected !== null} totalTimeSec={4} />
+                    stopped={selected !== null} totalTimeSec={timerDuration} />
 
                 {/* 연속 정답 게이지 */}
                 <div className={styles.consecutiveRow}>
@@ -480,7 +514,7 @@ export default function WrongWordsClient({ onExit }: Props) {
                         className={`${styles.glass} ${styles.quizQuestion}`}
                         initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: -30 }} transition={spring}>
-                        <p className={styles.quizWord}>{current.entry.word.word}</p>
+                        <p className={`${styles.quizWord} ${isIdiom ? styles.quizWordIdiom : ''}`}>{current.entry.word.word}</p>
                     </motion.div>
                 </AnimatePresence>
 
@@ -536,19 +570,26 @@ export default function WrongWordsClient({ onExit }: Props) {
         )
     }
 
-    // 필터링
+    // 타입 필터 적용된 졸업 단어
+    const typeFilteredMastered = masteredWords.filter(e => {
+        if (typeFilter === 'word') return e.word.type !== 'idiom'
+        if (typeFilter === 'idiom') return e.word.type === 'idiom'
+        return true
+    })
+
+    // 상태 필터링
     const isGraduatedView = listFilter === 'graduated'
     const filteredWords = isGraduatedView
-        ? masteredWords
-        : wrongWords.filter(entry => {
+        ? typeFilteredMastered
+        : typeFilteredWrongWords.filter(entry => {
             if (listFilter === 'danger') return entry.wrong_count >= 3
             if (listFilter === 'near_grad') return entry.consecutive_correct >= 2
             return true
         })
 
-    const dangerCount = wrongWords.filter(e => e.wrong_count >= 3).length
-    const nearGradCount = wrongWords.filter(e => e.consecutive_correct >= 2).length
-    const maxWrongCount = Math.max(...wrongWords.map(e => e.wrong_count), 1)
+    const dangerCount = typeFilteredWrongWords.filter(e => e.wrong_count >= 3).length
+    const nearGradCount = typeFilteredWrongWords.filter(e => e.consecutive_correct >= 2).length
+    const maxWrongCount = Math.max(...typeFilteredWrongWords.map(e => e.wrong_count), 1)
 
     return (
         <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }}
@@ -560,7 +601,12 @@ export default function WrongWordsClient({ onExit }: Props) {
                     <div>
                         <p style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text)', margin: 0 }}>
                             <BookX size={18} style={{ verticalAlign: '-3px', marginRight: '6px', color: '#ef4444' }} />
-                            오답 단어 {wrongWords.length}개
+                            오답 {wrongWords.length}개
+                            {wrongWords.some(e => e.word.type === 'idiom') && (
+                                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-sub)', marginLeft: '6px' }}>
+                                    (단어 {wrongWords.filter(e => e.word.type !== 'idiom').length} / 숙어 {wrongWords.filter(e => e.word.type === 'idiom').length})
+                                </span>
+                            )}
                         </p>
                         <p style={{ fontSize: '0.75rem', color: 'var(--text-sub)', margin: '2px 0 0' }}>
                             3회 연속 정답 시 졸업
@@ -587,14 +633,33 @@ export default function WrongWordsClient({ onExit }: Props) {
 
             {wrongWords.length < 4 && (
                 <p style={{ fontSize: '0.78rem', color: 'var(--text-sub)', textAlign: 'center', padding: '0 1rem' }}>
-                    오답 단어가 4개 이상일 때 퀴즈와 배틀을 시작할 수 있습니다.
+                    오답이 4개 이상일 때 퀴즈와 배틀을 시작할 수 있습니다.
                 </p>
             )}
 
-            {/* 필터 탭 */}
+            {/* 타입 필터 (전체 / 단어만 / 숙어만) */}
             <div className={`${styles.glass} ${styles.filterRow}`}>
                 {([
-                    { key: 'all' as ListFilter, label: '전체', icon: <List size={14} />, count: wrongWords.length },
+                    { key: 'all' as TypeFilter, label: '전체', count: wrongWords.length },
+                    { key: 'word' as TypeFilter, label: '📝 단어만', count: wrongWords.filter(e => e.word.type !== 'idiom').length },
+                    { key: 'idiom' as TypeFilter, label: '🔗 숙어만', count: wrongWords.filter(e => e.word.type === 'idiom').length },
+                ]).map(f => (
+                    <motion.button
+                        key={f.key}
+                        className={`${styles.filterBtn} ${typeFilter === f.key ? styles.filterActive : ''} ${f.key === 'word' && typeFilter === f.key ? styles.filterWord : ''} ${f.key === 'idiom' && typeFilter === f.key ? styles.filterIdiom : ''}`}
+                        onClick={() => setTypeFilter(f.key)}
+                        whileTap={{ scale: 0.95 }}
+                    >
+                        <span>{f.label}</span>
+                        <span className={styles.filterCount}>{f.count}</span>
+                    </motion.button>
+                ))}
+            </div>
+
+            {/* 상태 필터 탭 */}
+            <div className={`${styles.glass} ${styles.filterRow}`}>
+                {([
+                    { key: 'all' as ListFilter, label: '전체', icon: <List size={14} />, count: typeFilteredWrongWords.length },
                     { key: 'danger' as ListFilter, label: '위험', icon: <AlertTriangle size={14} />, count: dangerCount },
                     { key: 'near_grad' as ListFilter, label: '졸업임박', icon: <GraduationCap size={14} />, count: nearGradCount },
                     { key: 'graduated' as ListFilter, label: '졸업', icon: <CheckCircle2 size={14} />, count: masteredWords.length },
