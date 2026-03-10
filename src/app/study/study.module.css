@@ -151,10 +151,12 @@
 .battleBtn:hover {
   transform: translateY(-2px);
   box-shadow: 0 8px 16px rgba(16, 185, 129, 0.3);
+  filter: brightness(1.1);
 }
 
 .battleBtn:active {
   transform: translateY(0);
+  filter: brightness(1.05);
 }
 
 .reportBtn {
@@ -175,10 +177,12 @@
 .reportBtn:hover {
   transform: translateY(-2px);
   box-shadow: 0 8px 16px rgba(99, 102, 241, 0.3);
+  filter: brightness(1.1);
 }
 
 .reportBtn:active {
   transform: translateY(0);
+  filter: brightness(1.05);
 }
 
 /* ── 성공 횟수 & 메달 ── */
@@ -357,6 +361,7 @@
 .tabBtn:hover:not(:disabled) {
   background: rgba(99, 102, 241, 0.08);
   color: var(--blue);
+  filter: brightness(1.1);
 }
 
 .tabBtn:disabled {
@@ -513,6 +518,7 @@
 .navBtn:hover:not(:disabled) {
   background: rgba(99, 102, 241, 0.1);
   border-color: var(--blue);
+  filter: brightness(1.1);
 }
 
 .navBtn:disabled {
@@ -597,6 +603,7 @@
 .quizOption:hover:not(:disabled) {
   border-color: var(--blue);
   background: rgba(99, 102, 241, 0.08);
+  filter: brightness(1.1);
 }
 
 .quizOption:disabled {
@@ -653,6 +660,7 @@
 
 .nextBtn:hover {
   opacity: 0.88;
+  filter: brightness(1.1);
 }
 
 /* 결과 화면 */
@@ -717,6 +725,7 @@
 
 .retryBtn:hover {
   opacity: 0.88;
+  filter: brightness(1.1);
 }
 
 /* ── 퀴즈 타이머 바 ── */
@@ -764,6 +773,7 @@
 .revengeBtn:hover:not(:disabled) {
   transform: translateY(-2px);
   box-shadow: 0 8px 16px rgba(239, 68, 68, 0.3);
+  filter: brightness(1.1);
 }
 
 .revengeBtn:disabled {
@@ -791,6 +801,7 @@
 .revengeBattleBtn:hover:not(:disabled) {
   transform: translateY(-2px);
   box-shadow: 0 8px 16px rgba(99, 102, 241, 0.3);
+  filter: brightness(1.1);
 }
 
 .revengeBattleBtn:disabled {
@@ -1202,6 +1213,7 @@
 
 .setDropdownItem:hover {
   background: rgba(99, 102, 241, 0.08);
+  filter: brightness(1.1);
 }
 
 .setDropdownItemActive {

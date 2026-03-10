@@ -197,6 +197,7 @@
 .btnPrimary:hover:not(:disabled) {
     transform: translateY(-2px);
     box-shadow: 0 12px 24px rgba(99, 102, 241, 0.4);
+    filter: brightness(1.1);
 }
 
 .btnPrimary:disabled {
@@ -328,6 +329,7 @@
 .copyBtn:hover {
     background: rgba(99, 102, 241, 0.1);
     border-color: #6366f1;
+    filter: brightness(1.1);
 }
 
 .inviteHint {
@@ -480,6 +482,7 @@
 
 .btnSecondary:hover {
     background: #e2e8f0;
+    filter: brightness(1.1);
 }
 
 /* ── 배틀 퀴즈 화면 (BattleClient) ── */
@@ -692,6 +695,7 @@
     border-color: #6366f1;
     transform: translateY(-2px);
     box-shadow: 0 8px 16px rgba(99, 102, 241, 0.15);
+    filter: brightness(1.1);
 }
 
 .optCorrect {
@@ -1052,6 +1056,7 @@
     border-color: #6366f1;
     transform: translateY(-2px);
     box-shadow: 0 8px 16px rgba(99, 102, 241, 0.15);
+    filter: brightness(1.1);
 }
 
 /* ── 인게임 리더보드 개선 ── */

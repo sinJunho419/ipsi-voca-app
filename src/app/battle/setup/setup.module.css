@@ -340,6 +340,7 @@
 .startBtn:hover:not(:disabled) {
     transform: translateY(-2px);
     box-shadow: 0 12px 28px rgba(99, 102, 241, 0.45);
+    filter: brightness(1.1);
 }
 
 .startBtn:disabled {
