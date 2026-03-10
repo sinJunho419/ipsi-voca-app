@@ -240,56 +240,46 @@ export default function StudyClient({ initialWords, initialMaxSet }: Props) {
                                 const iSets = availableSets.filter(s => s.type === 'idiom')
                                 return (
                                     <div className={styles.setDropdownPanel}>
-                                        {wSets.length > 0 && (
-                                            <>
-                                                <div className={styles.setDropdownGroup}>단어 세트</div>
-                                                {wSets.map(s => {
-                                                    const key = `word:${s.setNo}`
-                                                    const sc = setProgressMap[key] ?? 0
-                                                    const isSelected = setType === 'word' && setNo === s.setNo
-                                                    return (
-                                                        <button
-                                                            key={`w-${s.setNo}`}
-                                                            className={`${styles.setDropdownItem} ${isSelected ? styles.setDropdownItemActive : ''}`}
-                                                            onClick={() => { changeSet(key); setSetDropdownOpen(false) }}
-                                                            type="button"
-                                                        >
-                                                            <span className={styles.setDropdownLabel}>{getSetLabel('word', level, s.setNo)}</span>
-                                                            <span className={styles.setDropdownDots}>
-                                                                {[0, 1, 2].map(i => (
-                                                                    <span key={i} className={`${styles.setDot} ${i < sc ? styles.setDotFilled : ''}`} />
-                                                                ))}
-                                                            </span>
+                                        {wSets.map(s => {
+                                            const key = `word:${s.setNo}`
+                                            const sc = setProgressMap[key] ?? 0
+                                            const isSelected = setType === 'word' && setNo === s.setNo
+                                            return (
+                                                <button
+                                                    key={`w-${s.setNo}`}
+                                                    className={`${styles.setDropdownItem} ${isSelected ? styles.setDropdownItemActive : ''}`}
+                                                    onClick={() => { changeSet(key); setSetDropdownOpen(false) }}
+                                                    type="button"
+                                                >
+                                                    <span className={styles.setDropdownLabel}>{getSetLabel('word', level, s.setNo)}</span>
+                                                    <span className={styles.setDropdownDots}>
+                                                        {[0, 1, 2].map(i => (
+                                                            <span key={i} className={`${styles.setDot} ${i < sc ? styles.setDotFilled : ''}`} />
+                                                        ))}
+                                                    </span>
+                                                </button>
+                                            )
+                                        })}
+                                        {iSets.length > 0 && iSets.map(s => {
+                                            const key = `idiom:${s.setNo}`
+                                            const sc = setProgressMap[key] ?? 0
+                                            const isSelected = setType === 'idiom' && setNo === s.setNo
+                                            return (
+                                                <button
+                                                    key={`i-${s.setNo}`}
+                                                    className={`${styles.setDropdownItem} ${isSelected ? styles.setDropdownItemActive : ''}`}
+                                                    onClick={() => { changeSet(key); setSetDropdownOpen(false) }}
+                                                    type="button"
+                                                >
+                                                    <span className={styles.setDropdownLabel}>{getSetLabel('idiom', level, s.setNo)}</span>
+                                                    <span className={styles.setDropdownDots}>
+                                                        {[0, 1, 2].map(i => (
+                                                            <span key={i} className={`${styles.setDot} ${i < sc ? styles.setDotFilled : ''}`} />
+                                                        ))}
+                                                    </span>
                                                         </button>
                                                     )
                                                 })}
-                                            </>
-                                        )}
-                                        {iSets.length > 0 && (
-                                            <>
-                                                <div className={styles.setDropdownGroup}>숙어 세트</div>
-                                                {iSets.map(s => {
-                                                    const key = `idiom:${s.setNo}`
-                                                    const sc = setProgressMap[key] ?? 0
-                                                    const isSelected = setType === 'idiom' && setNo === s.setNo
-                                                    return (
-                                                        <button
-                                                            key={`i-${s.setNo}`}
-                                                            className={`${styles.setDropdownItem} ${isSelected ? styles.setDropdownItemActive : ''}`}
-                                                            onClick={() => { changeSet(key); setSetDropdownOpen(false) }}
-                                                            type="button"
-                                                        >
-                                                            <span className={styles.setDropdownLabel}>{getSetLabel('idiom', level, s.setNo)}</span>
-                                                            <span className={styles.setDropdownDots}>
-                                                                {[0, 1, 2].map(i => (
-                                                                    <span key={i} className={`${styles.setDot} ${i < sc ? styles.setDotFilled : ''}`} />
-                                                                ))}
-                                                            </span>
-                                                        </button>
-                                                    )
-                                                })}
-                                            </>
-                                        )}
                                     </div>
                                 )
                             })()}
@@ -302,7 +292,7 @@ export default function StudyClient({ initialWords, initialMaxSet }: Props) {
                             className={styles.battleBtn}
                             onClick={() => router.push(`/battle/lobby${level ? `?level=${level}&setNo=${setNo}` : ''}`)}
                         >
-                            🏆 배틀 참여하기
+                            🏆 배틀 참여
                         </button>
                         <button
                             className={styles.reportBtn}
