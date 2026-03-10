@@ -10,15 +10,15 @@ export interface TierInfo {
 }
 
 const TIER_MAP: Record<Level, TierInfo> = {
-    elem_3: { label: 'Rookie',       labelKo: '루키',         alias: '초3', color: '#22c55e', bg: 'rgba(34,197,94,0.12)',   cssVar: '--tier-rookie' },
-    elem_4: { label: 'Starter',      labelKo: '스타터',       alias: '초4', color: '#14b8a6', bg: 'rgba(20,184,166,0.12)',  cssVar: '--tier-starter' },
-    elem_5: { label: 'Bronze',       labelKo: '브론즈',       alias: '초5', color: '#cd7f32', bg: 'rgba(205,127,50,0.12)',  cssVar: '--tier-bronze' },
-    elem_6: { label: 'Silver',       labelKo: '실버',         alias: '초6', color: '#94a3b8', bg: 'rgba(148,163,184,0.12)', cssVar: '--tier-silver' },
-    mid_1:  { label: 'Gold',         labelKo: '골드',         alias: '중1', color: '#eab308', bg: 'rgba(234,179,8,0.12)',   cssVar: '--tier-gold' },
-    mid_2:  { label: 'Platinum',     labelKo: '플래티넘',     alias: '중2', color: '#06b6d4', bg: 'rgba(6,182,212,0.12)',   cssVar: '--tier-platinum' },
-    mid_3:  { label: 'Diamond',      labelKo: '다이아몬드',   alias: '중3', color: '#3b82f6', bg: 'rgba(59,130,246,0.12)',  cssVar: '--tier-diamond' },
-    high_1: { label: 'Challenger',   labelKo: '챌린저',       alias: '고1', color: '#ef4444', bg: 'rgba(239,68,68,0.12)',   cssVar: '--tier-challenger' },
-    high_2: { label: 'GrandMaster',  labelKo: '그랜드마스터', alias: '고2', color: '#7c3aed', bg: 'rgba(124,58,237,0.12)',  cssVar: '--tier-grandmaster' },
+    elem_3: { label: 'Rookie',       labelKo: '루키',         alias: '초3', color: '#4ade80', bg: 'rgba(74,222,128,0.15)',   cssVar: '--tier-rookie' },
+    elem_4: { label: 'Starter',      labelKo: '스타터',       alias: '초4', color: '#2dd4bf', bg: 'rgba(45,212,191,0.15)',   cssVar: '--tier-starter' },
+    elem_5: { label: 'Bronze',       labelKo: '브론즈',       alias: '초5', color: '#d4915c', bg: 'rgba(212,145,92,0.15)',   cssVar: '--tier-bronze' },
+    elem_6: { label: 'Silver',       labelKo: '실버',         alias: '초6', color: '#94a3b8', bg: 'rgba(148,163,184,0.15)',  cssVar: '--tier-silver' },
+    mid_1:  { label: 'Gold',         labelKo: '골드',         alias: '중1', color: '#facc15', bg: 'rgba(250,204,21,0.15)',   cssVar: '--tier-gold' },
+    mid_2:  { label: 'Platinum',     labelKo: '플래티넘',     alias: '중2', color: '#22d3ee', bg: 'rgba(34,211,238,0.15)',   cssVar: '--tier-platinum' },
+    mid_3:  { label: 'Diamond',      labelKo: '다이아몬드',   alias: '중3', color: '#60a5fa', bg: 'rgba(96,165,250,0.15)',   cssVar: '--tier-diamond' },
+    high_1: { label: 'Challenger',   labelKo: '챌린저',       alias: '고1', color: '#f87171', bg: 'rgba(248,113,113,0.15)',  cssVar: '--tier-challenger' },
+    high_2: { label: 'GrandMaster',  labelKo: '그랜드마스터', alias: '고2', color: '#f59e0b', bg: 'linear-gradient(135deg,rgba(234,179,8,0.2),rgba(180,83,9,0.2))', cssVar: '--tier-grandmaster' },
 }
 
 /** level 값으로 티어 정보 반환 */

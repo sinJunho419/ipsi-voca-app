@@ -492,7 +492,7 @@ export default function BattleClient({ room, myId }: Props) {
                 {isRevenge ? '오답 단어가 없습니다' : '데이터가 없습니다'}
             </h2>
             {isRevenge && (
-                <p style={{ textAlign: 'center', color: '#64748b', fontSize: '0.9rem' }}>
+                <p style={{ textAlign: 'center', color: '#94a3b8', fontSize: '0.9rem' }}>
                     학습 퀴즈나 일반 배틀에서 틀린 단어가 있어야 리벤지 배틀에 참여할 수 있습니다.
                 </p>
             )}
@@ -503,7 +503,7 @@ export default function BattleClient({ room, myId }: Props) {
 
     const current = quiz[index]
     const total = quiz.length
-    const timerColor = timerProgress > 50 ? '#4ade80' : timerProgress > 25 ? '#facc15' : '#ef4444'
+    const timerColor = timerProgress > 50 ? '#06b6d4' : timerProgress > 25 ? '#6366f1' : '#ef4444'
     const timerDuration = current ? getTimerSec(current.word, current.useSentence) : 4
 
     // 리더보드 계산
@@ -572,7 +572,7 @@ export default function BattleClient({ room, myId }: Props) {
                 initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={spring}>
                 <div className={styles.resultEmoji}>🚪</div>
                 <h2 className={styles.title}>응답 없음 - 자동 패배</h2>
-                <p style={{ textAlign: 'center', color: '#64748b', marginTop: '0.5rem' }}>
+                <p style={{ textAlign: 'center', color: '#94a3b8', marginTop: '0.5rem' }}>
                     연속 미응답으로 자동 패배 처리되었습니다.
                 </p>
                 <button className={styles.btnPrimary} style={{ marginTop: '2rem' }}
@@ -643,7 +643,7 @@ export default function BattleClient({ room, myId }: Props) {
                 )}
 
                 {isRevenge && (
-                    <p style={{ fontSize: '0.8rem', color: '#64748b', textAlign: 'center' }}>
+                    <p style={{ fontSize: '0.8rem', color: '#94a3b8', textAlign: 'center' }}>
                         각 플레이어가 자신의 오답 단어로 대결했습니다
                     </p>
                 )}

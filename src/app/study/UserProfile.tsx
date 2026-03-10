@@ -86,9 +86,9 @@ export default function UserProfile({ level, refreshKey }: Props) {
                 className={styles.profileCard}
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
-                style={{ justifyContent: 'center', background: 'rgba(255, 255, 255, 0.4)' }}
+                style={{ justifyContent: 'center', background: 'rgba(15, 23, 42, 0.5)' }}
             >
-                <span style={{ fontSize: '0.85rem', color: '#64748b' }}>
+                <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
                     💡 로그인이 안 되어 있습니다. (진도가 저장되지 않음)
                 </span>
             </motion.div>
@@ -141,7 +141,7 @@ export default function UserProfile({ level, refreshKey }: Props) {
                 </div>
                 <div className={styles.profileStatDivider} />
                 <div className={styles.profileStatItem}>
-                    <span className={styles.profileStatNum} style={{ color: '#d97706' }}>
+                    <span className={styles.profileStatNum} style={{ color: '#fbbf24' }}>
                         {profile.medalCount}
                     </span>
                     <span className={styles.profileStatLabel}>훈장</span>

@@ -393,7 +393,7 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
                             animate={{ width: `${timerPercent}%` }}
                             transition={{ duration: 1, ease: 'linear' }}
                             style={{
-                                backgroundColor: waitSeconds > 30 ? '#4ade80' : waitSeconds > 10 ? '#facc15' : '#ef4444',
+                                backgroundColor: waitSeconds > 30 ? '#06b6d4' : waitSeconds > 10 ? '#6366f1' : '#ef4444',
                             }}
                         />
                     </div>

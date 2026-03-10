@@ -20,25 +20,26 @@
   --mint-l: #6ee7b7;
   --yellow: #f59e0b;
 
-  /* 배경 & 텍스트 */
-  --bg: #f0f4ff;
-  --surface: rgba(255, 255, 255, 0.55);
-  --border: rgba(255, 255, 255, 0.7);
-  --text: #1e1b4b;
-  --text-sub: #64748b;
-  --shadow: 0 8px 32px rgba(99, 102, 241, 0.12);
+  /* 배경 & 텍스트 (다크 모드) */
+  --bg: #020617;
+  --surface: rgba(15, 23, 42, 0.5);
+  --border: #1e293b;
+  --text: #cbd5e1;
+  --text-sub: #94a3b8;
+  --shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   --blur: blur(20px);
+  --glow: 0 0 40px rgba(99, 102, 241, 0.15);
 
-  /* ── 티어 색상 ── */
-  --tier-rookie: #22c55e;
-  --tier-starter: #14b8a6;
-  --tier-bronze: #cd7f32;
+  /* ── 티어 색상 (다크 모드 최적화) ── */
+  --tier-rookie: #4ade80;
+  --tier-starter: #2dd4bf;
+  --tier-bronze: #d4915c;
   --tier-silver: #94a3b8;
-  --tier-gold: #eab308;
-  --tier-platinum: #06b6d4;
-  --tier-diamond: #3b82f6;
-  --tier-challenger: #ef4444;
-  --tier-grandmaster: #7c3aed;
+  --tier-gold: #facc15;
+  --tier-platinum: #22d3ee;
+  --tier-diamond: #60a5fa;
+  --tier-challenger: #f87171;
+  --tier-grandmaster: #a78bfa;
 }
 
 html,
@@ -48,6 +49,7 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font);
+  color-scheme: dark;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

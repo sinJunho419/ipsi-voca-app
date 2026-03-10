@@ -161,7 +161,7 @@ function BattleCreateSettings({ onCancel, onCreate, creating, errorMsg }: {
                     <>
                         {wordSets.length > 0 && (
                             <>
-                                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#6366f1', margin: '0.3rem 0 0.2rem' }}>
+                                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#818cf8', margin: '0.3rem 0 0.2rem' }}>
                                     단어 세트
                                 </div>
                                 <div className={styles.setsGrid}>
@@ -179,7 +179,7 @@ function BattleCreateSettings({ onCancel, onCreate, creating, errorMsg }: {
                         )}
                         {idiomSets.length > 0 && (
                             <>
-                                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#d97706', margin: '0.5rem 0 0.2rem' }}>
+                                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#fbbf24', margin: '0.5rem 0 0.2rem' }}>
                                     숙어 세트
                                 </div>
                                 <div className={styles.setsGrid}>

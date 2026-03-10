@@ -1,5 +1,5 @@
 /* ════════════════════════════════════════
-   주간 리포트 — Glassmorphism UI
+   주간 리포트 — Dark Mode UI
    ════════════════════════════════════════ */
 
 /* ── 페이지 래퍼 ── */
@@ -13,12 +13,12 @@
   overflow: hidden;
 }
 
-/* 배경 블롭 */
+/* 배경 블롭 (다크) */
 .blob1, .blob2 {
   position: fixed;
   border-radius: 50%;
   filter: blur(80px);
-  opacity: 0.4;
+  opacity: 0.2;
   pointer-events: none;
   z-index: 0;
 }
@@ -26,7 +26,7 @@
 .blob1 {
   width: 480px;
   height: 480px;
-  background: radial-gradient(circle, #a5b4fc 0%, #6366f1 60%, transparent 100%);
+  background: radial-gradient(circle, #4338ca 0%, #312e81 60%, transparent 100%);
   top: -140px;
   left: -140px;
 }
@@ -34,7 +34,7 @@
 .blob2 {
   width: 400px;
   height: 400px;
-  background: radial-gradient(circle, #f9a8d4 0%, #ec4899 60%, transparent 100%);
+  background: radial-gradient(circle, #7c3aed 0%, #581c87 60%, transparent 100%);
   bottom: -100px;
   right: -100px;
 }
@@ -54,7 +54,7 @@
 .pageTitle {
   font-size: 1.35rem;
   font-weight: 800;
-  color: var(--text);
+  color: #ffffff;
   letter-spacing: -0.02em;
 }
 
@@ -65,7 +65,7 @@
   padding: 0.4rem 0.75rem;
   border: none;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(99, 102, 241, 0.1);
   backdrop-filter: blur(12px);
   color: var(--text);
   font-size: 0.82rem;
@@ -75,7 +75,8 @@
 }
 
 .backBtn:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: rgba(99, 102, 241, 0.2);
+  filter: brightness(1.1);
 }
 
 /* ── 로더 ── */
@@ -85,7 +86,7 @@
   margin-top: 40vh;
   font-size: 1.1rem;
   font-weight: 700;
-  color: #6366f1;
+  color: #818cf8;
   animation: pulse 1.2s ease-in-out infinite;
 }
 
@@ -106,15 +107,15 @@
   perspective: 1200px;
 }
 
-/* ── 카드 (글래스) ── */
+/* ── 카드 (다크 글래스) ── */
 .card {
   width: 100%;
-  background: rgba(255, 255, 255, 0.18);
+  background: rgba(15, 23, 42, 0.5);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  border: 1px solid #1e293b;
   border-radius: 20px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
   overflow: hidden;
 }
 
@@ -128,13 +129,13 @@
   gap: 8px;
   font-size: 1.1rem;
   font-weight: 800;
-  color: var(--text);
+  color: #ffffff;
   margin: 0 0 1rem;
 }
 
 .greeting {
   font-size: 0.88rem;
-  color: #64748b;
+  color: #94a3b8;
   margin: -0.5rem 0 1.25rem;
   font-weight: 500;
 }
@@ -152,27 +153,27 @@
   align-items: center;
   gap: 4px;
   padding: 1rem 0.5rem;
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(15, 23, 42, 0.5);
   border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid #1e293b;
 }
 
-.statIcon { color: #6366f1; }
-.statIconGold { color: #eab308; }
-.statIconGreen { color: #10b981; }
-.statIconOrange { color: #f97316; }
+.statIcon { color: #818cf8; }
+.statIconGold { color: #facc15; }
+.statIconGreen { color: #4ade80; }
+.statIconOrange { color: #fb923c; }
 
 .statValue {
   font-size: 1.6rem;
   font-weight: 800;
-  color: var(--text);
+  color: #ffffff;
   line-height: 1;
 }
 
 .statLabel {
   font-size: 0.75rem;
   font-weight: 600;
-  color: #64748b;
+  color: #94a3b8;
 }
 
 /* ── 차트 ── */
@@ -197,7 +198,7 @@
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #6366f1, #a78bfa);
+  background: linear-gradient(135deg, #4338ca, #6366f1);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -208,13 +209,13 @@
 .rivalName {
   font-size: 1rem;
   font-weight: 700;
-  color: var(--text);
+  color: #e2e8f0;
   margin: 0;
 }
 
 .rivalSub {
   font-size: 0.78rem;
-  color: #64748b;
+  color: #94a3b8;
   margin: 2px 0 0;
 }
 
@@ -259,21 +260,21 @@
   align-items: center;
   gap: 6px;
   padding: 1rem;
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(15, 23, 42, 0.5);
   border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid #1e293b;
 }
 
 .achieveValue {
   font-size: 1.3rem;
   font-weight: 800;
-  color: var(--text);
+  color: #ffffff;
 }
 
 .achieveLabel {
   font-size: 0.72rem;
   font-weight: 600;
-  color: #64748b;
+  color: #94a3b8;
 }
 
 /* ── 학원 비교 배너 ── */
@@ -304,7 +305,7 @@
 .compText {
   font-size: 0.9rem;
   font-weight: 700;
-  color: var(--text);
+  color: #e2e8f0;
   margin: 0;
   line-height: 1.4;
 }
@@ -325,7 +326,7 @@
 .compareLabel {
   font-size: 0.78rem;
   font-weight: 700;
-  color: #64748b;
+  color: #94a3b8;
 }
 
 .compareBars {
@@ -339,7 +340,7 @@
   align-items: center;
   gap: 8px;
   height: 22px;
-  background: rgba(0, 0, 0, 0.04);
+  background: rgba(255, 255, 255, 0.04);
   border-radius: 6px;
   overflow: hidden;
   position: relative;
@@ -354,7 +355,7 @@
 
 .compareBarAvg {
   height: 100%;
-  background: linear-gradient(90deg, #94a3b8, #cbd5e1);
+  background: linear-gradient(90deg, #64748b, #94a3b8);
   border-radius: 6px;
   min-width: 4px;
 }
@@ -364,14 +365,14 @@
   right: 8px;
   font-size: 0.7rem;
   font-weight: 700;
-  color: var(--text);
+  color: #e2e8f0;
 }
 
 .compareLegend {
   display: flex;
   gap: 16px;
   font-size: 0.7rem;
-  color: #64748b;
+  color: #94a3b8;
   font-weight: 600;
 }
 
@@ -420,14 +421,14 @@
 .donutValue {
   font-size: 2rem;
   font-weight: 900;
-  color: var(--text);
+  color: #ffffff;
   line-height: 1;
 }
 
 .donutLabel {
   font-size: 0.75rem;
   font-weight: 600;
-  color: #64748b;
+  color: #94a3b8;
 }
 
 .winRateStats {
@@ -452,13 +453,13 @@
 .winRateStatLabel {
   font-size: 0.78rem;
   font-weight: 600;
-  color: #64748b;
+  color: #94a3b8;
 }
 
 .winRateStatValue {
   font-size: 0.82rem;
   font-weight: 800;
-  color: var(--text);
+  color: #e2e8f0;
 }
 
 /* ── 캐러셀 네비게이션 ── */
@@ -474,7 +475,7 @@
   height: 36px;
   border: none;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(99, 102, 241, 0.1);
   backdrop-filter: blur(10px);
   color: var(--text);
   display: flex;
@@ -485,7 +486,8 @@
 }
 
 .navBtn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.4);
+  background: rgba(99, 102, 241, 0.2);
+  filter: brightness(1.1);
 }
 
 .navBtn:disabled {
@@ -503,13 +505,13 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.15);
   cursor: pointer;
   transition: background 0.2s, transform 0.2s;
 }
 
 .dot:hover {
-  background: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.3);
 }
 
 .dotActive {
@@ -524,8 +526,8 @@
   gap: 12px;
   margin-top: 1rem;
   padding: 0.85rem 1rem;
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(251, 191, 36, 0.08));
-  border: 1.5px solid rgba(245, 158, 11, 0.3);
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(251, 191, 36, 0.06));
+  border: 1.5px solid rgba(245, 158, 11, 0.25);
   border-radius: 14px;
 }
 
@@ -537,13 +539,13 @@
 .idiomHighlightTitle {
   font-size: 0.92rem;
   font-weight: 800;
-  color: #b45309;
+  color: #fbbf24;
   margin: 0;
 }
 
 .idiomHighlightSub {
   font-size: 0.75rem;
   font-weight: 600;
-  color: #d97706;
+  color: #f59e0b;
   margin: 2px 0 0;
 }

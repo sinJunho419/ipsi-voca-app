@@ -247,7 +247,7 @@ function SetupContent() {
                         <>
                             {wordSets.length > 0 && (
                                 <>
-                                    <p style={{ fontSize: '0.78rem', fontWeight: 700, color: '#6366f1', margin: '0.3rem 0 0.2rem' }}>단어 세트</p>
+                                    <p style={{ fontSize: '0.78rem', fontWeight: 700, color: '#818cf8', margin: '0.3rem 0 0.2rem' }}>단어 세트</p>
                                     <div className={styles.setGrid}>
                                         {wordSets.map(setNo => (
                                             <div className={styles.setChk} key={`w-${setNo}`}>
@@ -267,7 +267,7 @@ function SetupContent() {
                             )}
                             {idiomSets.length > 0 && (
                                 <>
-                                    <p style={{ fontSize: '0.78rem', fontWeight: 700, color: '#d97706', margin: '0.5rem 0 0.2rem' }}>숙어 세트</p>
+                                    <p style={{ fontSize: '0.78rem', fontWeight: 700, color: '#fbbf24', margin: '0.5rem 0 0.2rem' }}>숙어 세트</p>
                                     <div className={styles.setGrid}>
                                         {idiomSets.map(setNo => (
                                             <div className={styles.setChk} key={`i-${setNo}`}>

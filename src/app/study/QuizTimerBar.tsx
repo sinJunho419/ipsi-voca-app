@@ -58,7 +58,7 @@ export default function QuizTimerBar({
     // accentColor가 있으면 고정, 없으면 진행률 기반 3색
     const barColor = accentColor
         ? accentColor
-        : progress > 50 ? '#4ade80' : progress > 25 ? '#facc15' : '#ef4444'
+        : progress > 50 ? '#06b6d4' : progress > 25 ? '#6366f1' : '#ef4444'
 
     return (
         <div className={styles.timerBarTrack}>
