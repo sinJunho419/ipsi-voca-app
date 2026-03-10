@@ -1182,10 +1182,10 @@
 
 .setDropdownItem {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  align-items: flex-start;
   width: 100%;
-  padding: 0.5rem 0.6rem;
+  padding: 0.45rem 0.6rem;
   border: none;
   border-radius: 0.65rem;
   background: transparent;
@@ -1195,7 +1195,7 @@
   color: var(--text);
   cursor: pointer;
   transition: background 0.15s;
-  gap: 0.5rem;
+  gap: 2px;
 }
 
 .setDropdownItem:hover {
@@ -1221,22 +1221,24 @@
   display: flex;
   align-items: center;
   gap: 3px;
-  flex-shrink: 0;
+  font-size: 0.7rem;
+  color: #94a3b8;
+  font-weight: 500;
 }
 
 .setDot {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: transparent;
-  border: 2px solid #cbd5e1;
+  border: 1.5px solid #cbd5e1;
   transition: all 0.25s;
 }
 
 .setDotFilled {
   background: #4ade80;
   border-color: #22c55e;
-  box-shadow: 0 0 5px rgba(74, 222, 128, 0.4);
+  box-shadow: 0 0 4px rgba(74, 222, 128, 0.4);
 }
 
 /* ── 세트 그룹 제목 (학습 설정) ── */

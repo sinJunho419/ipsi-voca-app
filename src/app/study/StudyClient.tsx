@@ -253,9 +253,9 @@ export default function StudyClient({ initialWords, initialMaxSet }: Props) {
                                                 >
                                                     <span className={styles.setDropdownLabel}>{getSetLabel('word', level, s.setNo)}</span>
                                                     <span className={styles.setDropdownDots}>
-                                                        {[0, 1, 2].map(i => (
+                                                        ({[0, 1, 2].map(i => (
                                                             <span key={i} className={`${styles.setDot} ${i < sc ? styles.setDotFilled : ''}`} />
-                                                        ))}
+                                                        ))})
                                                     </span>
                                                 </button>
                                             )
@@ -273,13 +273,13 @@ export default function StudyClient({ initialWords, initialMaxSet }: Props) {
                                                 >
                                                     <span className={styles.setDropdownLabel}>{getSetLabel('idiom', level, s.setNo)}</span>
                                                     <span className={styles.setDropdownDots}>
-                                                        {[0, 1, 2].map(i => (
+                                                        ({[0, 1, 2].map(i => (
                                                             <span key={i} className={`${styles.setDot} ${i < sc ? styles.setDotFilled : ''}`} />
-                                                        ))}
+                                                        ))})
                                                     </span>
-                                                        </button>
-                                                    )
-                                                })}
+                                                </button>
+                                            )
+                                        })}
                                     </div>
                                 )
                             })()}
