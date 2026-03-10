@@ -6,15 +6,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
 import type { Level } from '@/types/vocabulary'
 import { getSetLabel } from '@/lib/setAliases'
+import { TIER_LEVELS } from '@/lib/tierSystem'
 import styles from './lobby.module.css'
-
-const LEVELS: { value: Level; label: string }[] = [
-    { value: 'elem_3', label: '초등 3학년' },
-    { value: 'elem_4', label: '초등 4학년' },
-    { value: 'elem_5', label: '초등 5학년' },
-    { value: 'elem_6', label: '초등 6학년' },
-    { value: 'high_1', label: '고등 1학년' },
-]
 
 const QUESTION_COUNTS = [10, 20, 25, 40]
 
@@ -119,7 +112,7 @@ function BattleCreateSettings({ onCancel, onCreate, creating, errorMsg }: {
         >
             <header className={styles.header}>
                 <h1 className={styles.title}>⚙️ 배틀 설정</h1>
-                <p className={styles.subtitle}>레벨, 세트, 문항수를 선택하세요</p>
+                <p className={styles.subtitle}>티어, 세트, 문항수를 선택하세요</p>
             </header>
 
             {errorMsg && (
@@ -135,13 +128,13 @@ function BattleCreateSettings({ onCancel, onCreate, creating, errorMsg }: {
             )}
 
             <div className={styles.settingGroup}>
-                <label className={styles.settingLabel}>레벨</label>
+                <label className={styles.settingLabel}>티어</label>
                 <select
                     className={styles.settingSelect}
                     value={level}
                     onChange={e => setLevel(e.target.value as Level)}
                 >
-                    {LEVELS.map(l => (
+                    {TIER_LEVELS.map(l => (
                         <option key={l.value} value={l.value}>{l.label}</option>
                     ))}
                 </select>

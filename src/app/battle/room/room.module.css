@@ -1361,6 +1361,29 @@
     100% { transform: scale(1); opacity: 1; }
 }
 
+/* ── 티어 배지 ── */
+.tierBadge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    border: 1.5px solid;
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+.tierBadgeSm {
+    font-size: 0.6rem;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    flex-shrink: 0;
+    white-space: nowrap;
+    opacity: 0.85;
+}
+
 /* ── 숙어 Auto-scaling 질문 텍스트 ── */
 .questionWordIdiom {
     font-size: 1.8rem !important;

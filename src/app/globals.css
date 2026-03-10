@@ -28,6 +28,17 @@
   --text-sub: #64748b;
   --shadow: 0 8px 32px rgba(99, 102, 241, 0.12);
   --blur: blur(20px);
+
+  /* ── 티어 색상 ── */
+  --tier-rookie: #22c55e;
+  --tier-starter: #14b8a6;
+  --tier-bronze: #cd7f32;
+  --tier-silver: #94a3b8;
+  --tier-gold: #eab308;
+  --tier-platinum: #06b6d4;
+  --tier-diamond: #3b82f6;
+  --tier-challenger: #ef4444;
+  --tier-grandmaster: #7c3aed;
 }
 
 html,

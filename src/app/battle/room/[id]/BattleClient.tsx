@@ -5,6 +5,8 @@ import { motion, AnimatePresence, type Transition } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
 import type { Word } from '@/types/vocabulary'
 import { Timer, Trophy, Medal, ArrowLeft, CheckCircle2, Swords } from 'lucide-react'
+import { getTierInfo } from '@/lib/tierSystem'
+import type { Level } from '@/types/vocabulary'
 import styles from '../room.module.css'
 import confetti from 'canvas-confetti'
 
@@ -155,6 +157,7 @@ export default function BattleClient({ room, myId }: Props) {
 
     const isHost = room.host_id === myId
     const myScore = scores[myId] || 0
+    const tierInfo = room.level ? getTierInfo(room.level as Level) : null
 
     // scores ref 동기화
     useEffect(() => { scoresRef.current = scores }, [scores])
@@ -611,6 +614,14 @@ export default function BattleClient({ room, myId }: Props) {
                                 <span style={{ marginLeft: '4px' }}>
                                     {entry.name}{entry.isLeft ? ' (이탈)' : entry.isMe ? ' (나)' : ''}
                                 </span>
+                                {tierInfo && !entry.isLeft && (
+                                    <span
+                                        className={styles.tierBadge}
+                                        style={{ color: tierInfo.color, background: tierInfo.bg, borderColor: tierInfo.color }}
+                                    >
+                                        {tierInfo.label}
+                                    </span>
+                                )}
                             </span>
                             <span className={styles.resultPt}>{entry.isLeft ? '0pt' : `${entry.score}pt`}</span>
                         </motion.div>
@@ -711,6 +722,14 @@ export default function BattleClient({ room, myId }: Props) {
                         <span className={styles.livePlayerName}>
                             {entry.name}{entry.isLeft ? ' (이탈)' : ''}
                         </span>
+                        {tierInfo && !entry.isLeft && (
+                            <span
+                                className={styles.tierBadgeSm}
+                                style={{ color: tierInfo.color }}
+                            >
+                                {tierInfo.label}
+                            </span>
+                        )}
                         <motion.span
                             key={entry.score}
                             className={styles.livePlayerScore}

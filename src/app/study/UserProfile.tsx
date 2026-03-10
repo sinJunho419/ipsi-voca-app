@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
 import type { Level } from '@/types/vocabulary'
+import { getTierInfo } from '@/lib/tierSystem'
 import styles from './study.module.css'
 
 // ── 레벨별 총 세트 수 (공식 목표치) ──────────────────────────────
@@ -18,28 +19,6 @@ const TOTAL_SETS: Record<Level, number> = {
     mid_3: 16,
     high_1: 16,
     high_2: 16,
-}
-
-// ── 별칭 & 티어 매핑 ─────────────────────────────────────────────
-type TierInfo = {
-    alias: string   // 별칭 (예: 초등, 중등)
-    tier: string    // 티어명 (예: 브론즈, 실버, 골드, 마스터)
-    color: string   // 티어 강조색
-    bg: string      // 배지 배경
-}
-
-function getTierInfo(level: Level): TierInfo {
-    switch (level) {
-        case 'elem_3': return { alias: '초3', tier: '스타터', color: '#10b981', bg: 'rgba(16,185,129,0.1)' }
-        case 'elem_4': return { alias: '초4', tier: '브론즈', color: '#b45309', bg: 'rgba(180,83,9,0.1)' }
-        case 'elem_5': return { alias: '초5', tier: '실버', color: '#475569', bg: 'rgba(71,85,105,0.1)' }
-        case 'elem_6': return { alias: '초6', tier: '골드', color: '#d97706', bg: 'rgba(217,119,6,0.1)' }
-        case 'mid_1': return { alias: '중1', tier: '플래티넘', color: '#0ea5e9', bg: 'rgba(14,165,233,0.1)' }
-        case 'mid_2': return { alias: '중2', tier: '다이아', color: '#8b5cf6', bg: 'rgba(139,92,246,0.1)' }
-        case 'mid_3': return { alias: '중3', tier: '마스터', color: '#ec4899', bg: 'rgba(236,72,153,0.1)' }
-        case 'high_1': return { alias: '고1', tier: '그랜드마스터', color: '#ef4444', bg: 'rgba(239,68,68,0.1)' }
-        case 'high_2': return { alias: '고2', tier: '챌린저', color: '#f59e0b', bg: 'rgba(245,158,11,0.1)' }
-    }
 }
 
 /**
@@ -116,7 +95,7 @@ export default function UserProfile({ level, refreshKey }: Props) {
         )
     }
 
-    const { alias, tier, color, bg } = getTierInfo(level)
+    const { alias, label: tier, color, bg } = getTierInfo(level)
 
     return (
         <motion.div

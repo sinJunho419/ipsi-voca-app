@@ -6,20 +6,8 @@ import { motion } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
 import type { Level, Word } from '@/types/vocabulary'
 import { getSetLabel } from '@/lib/setAliases'
+import { TIER_LEVELS } from '@/lib/tierSystem'
 import styles from './setup.module.css'
-
-// ── 상수 ──────────────────────────────────────────────────────
-const LEVELS: { value: Level; label: string }[] = [
-    { value: 'elem_3', label: '초등 3학년' },
-    { value: 'elem_4', label: '초등 4학년' },
-    { value: 'elem_5', label: '초등 5학년' },
-    { value: 'elem_6', label: '초등 6학년' },
-    { value: 'mid_1', label: '중등 1학년' },
-    { value: 'mid_2', label: '중등 2학년' },
-    { value: 'mid_3', label: '중등 3학년' },
-    { value: 'high_1', label: '고등 1학년' },
-    { value: 'high_2', label: '고등 2학년' },
-]
 
 const COUNT_OPTIONS = [10, 20, 30] as const
 
@@ -220,19 +208,19 @@ function SetupContent() {
                 {/* 헤더 */}
                 <header className={styles.header}>
                     <h1 className={styles.title}>⚙️ 배틀 설정</h1>
-                    <p className={styles.subtitle}>단어 범위와 출제 조건을 설정하세요</p>
+                    <p className={styles.subtitle}>티어, 세트, 출제 조건을 설정하세요</p>
                 </header>
 
-                {/* ① 학년 선택 */}
+                {/* ① 티어 선택 */}
                 <section className={styles.section}>
-                    <p className={styles.sectionLabel}>① 학년 선택</p>
+                    <p className={styles.sectionLabel}>① 티어 선택</p>
                     <div className={styles.selectWrapper}>
                         <select
                             value={level}
                             onChange={(e) => setLevel(e.target.value as Level)}
                             className={styles.levelSelect}
                         >
-                            {LEVELS.map(lv => (
+                            {TIER_LEVELS.map(lv => (
                                 <option key={lv.value} value={lv.value}>
                                     {lv.label}
                                 </option>

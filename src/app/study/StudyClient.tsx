@@ -5,24 +5,13 @@ import { motion, AnimatePresence, type Transition } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
 import type { Word, Level } from '@/types/vocabulary'
 import { getSetLabel } from '@/lib/setAliases'
+import { TIER_LEVELS } from '@/lib/tierSystem'
 import styles from './study.module.css'
 import { useRouter } from 'next/navigation'
 import QuizClient from './QuizClient'
 import MasterChallengeClient from './MasterChallengeClient'
 import WrongWordsClient from './WrongWordsClient'
 import BattleFeed from '@/components/BattleFeed'
-
-const LEVELS: { value: Level; label: string }[] = [
-    { value: 'elem_3', label: '초등 3학년' },
-    { value: 'elem_4', label: '초등 4학년' },
-    { value: 'elem_5', label: '초등 5학년' },
-    { value: 'elem_6', label: '초등 6학년' },
-    { value: 'mid_1', label: '중등 1학년' },
-    { value: 'mid_2', label: '중등 2학년' },
-    { value: 'mid_3', label: '중등 3학년' },
-    { value: 'high_1', label: '고등 1학년' },
-    { value: 'high_2', label: '고등 2학년' },
-]
 
 type Tab = 'study' | 'quiz' | 'wrong' | 'master'
 
@@ -193,8 +182,8 @@ export default function StudyClient({ initialWords, initialMaxSet }: Props) {
                     {/* 1줄: 학년 & 세트 선택 */}
                     <div className={styles.selectRow}>
                         <select value={level ?? ''} onChange={e => changeLevel((e.target.value || null) as Level | null)} disabled={isPending}>
-                            <option value="" disabled>학년 선택</option>
-                            {LEVELS.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
+                            <option value="" disabled>티어 선택</option>
+                            {TIER_LEVELS.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
                         </select>
                         <select value={setNo !== null ? `${setType}:${setNo}` : ''} onChange={e => changeSet(e.target.value)} disabled={isPending || !level}>
                             <option value="" disabled>Set 선택</option>
@@ -287,7 +276,7 @@ export default function StudyClient({ initialWords, initialMaxSet }: Props) {
                         </div>
                     ) : (
                         <p className={styles.selectHint}>
-                            {!level ? '학년과 세트를 선택하세요' : '세트를 선택하세요'}
+                            {!level ? '티어와 세트를 선택하세요' : '세트를 선택하세요'}
                         </p>
                     )}
                 </motion.div>

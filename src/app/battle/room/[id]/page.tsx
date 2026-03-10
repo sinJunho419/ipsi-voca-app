@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
 import { Crown, Swords, Users, User, LogOut } from 'lucide-react'
+import { getTierInfo } from '@/lib/tierSystem'
+import type { Level } from '@/types/vocabulary'
 import styles from '../room.module.css'
 import BattleClient from './BattleClient'
 
@@ -302,6 +304,7 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
 
     const isHost = room.host_id === userId
     const participantCount = room.participant_ids?.length || 0
+    const tierInfo = room.level ? getTierInfo(room.level as Level) : null
 
     // 방장: 배틀 시작 핸들러 (2명 이상일 때만)
     const handleStartBattle = async () => {
@@ -425,6 +428,14 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
                                         {participantNames[pid] || '로딩...'}
                                         {isMe && ' (나)'}
                                     </span>
+                                    {tierInfo && (
+                                        <span
+                                            className={styles.tierBadge}
+                                            style={{ color: tierInfo.color, background: tierInfo.bg, borderColor: tierInfo.color }}
+                                        >
+                                            {tierInfo.label}
+                                        </span>
+                                    )}
                                     {isThisHost && <span className={styles.hostTag}>방장</span>}
                                     <div className={styles.recordBadge}>
                                         <span className={styles.recordWin}>{records[pid]?.wins ?? 0}승</span>
