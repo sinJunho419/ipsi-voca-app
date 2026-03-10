@@ -129,12 +129,15 @@
     color: white;
     border: none;
     border-radius: 1rem;
-    font-size: 1.2rem;
+    font-size: 1.1rem;
     font-weight: 800;
     cursor: pointer;
     box-shadow: 0 8px 24px rgba(99, 102, 241, 0.3);
     transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s;
     letter-spacing: -0.01em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .btnCreate:hover {
@@ -171,17 +174,18 @@
 }
 
 .codeInput {
-    flex: 0.55;
+    flex: 1;
+    min-width: 0;
     background: rgba(15, 23, 42, 0.6);
     border: 1.5px solid rgba(99, 102, 241, 0.25);
     border-radius: 1rem;
-    padding: 0 1rem;
-    font-size: 1rem;
+    padding: 0 0.75rem;
+    font-size: 0.95rem;
     font-weight: 700;
     color: #ffffff;
     text-align: center;
     text-transform: uppercase;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.08em;
     outline: none;
     transition: border-color 0.2s, background 0.2s;
     height: 3rem;
@@ -200,17 +204,19 @@
 }
 
 .btnJoin {
-    flex: 0.45;
+    flex-shrink: 0;
     height: 3rem;
+    padding: 0 1.2rem;
     background: linear-gradient(135deg, #10b981, #059669);
     color: white;
     border: none;
     border-radius: 1rem;
-    font-size: 1.05rem;
+    font-size: 0.95rem;
     font-weight: 700;
     cursor: pointer;
     box-shadow: 0 4px 14px rgba(16, 185, 129, 0.25);
     transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s;
+    white-space: nowrap;
 }
 
 .btnJoin:hover {
@@ -478,10 +484,11 @@
     border: 1.5px solid #334155;
     border-radius: 1rem;
     color: #94a3b8;
-    font-size: 1rem;
+    font-size: 0.95rem;
     font-weight: 700;
     cursor: pointer;
     transition: background 0.2s, border-color 0.2s;
+    white-space: nowrap;
 }
 
 .btnCancel:hover {
@@ -497,11 +504,12 @@
     color: white;
     border: none;
     border-radius: 1rem;
-    font-size: 1.05rem;
+    font-size: 1rem;
     font-weight: 800;
     cursor: pointer;
     box-shadow: 0 6px 20px rgba(99, 102, 241, 0.3);
     transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s;
+    white-space: nowrap;
 }
 
 .btnStart:hover {

@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 /**
  * Service-role 기반 배틀 API
- * 모든 요청에 Supabase 세션 인증 필수
+ * 인증된 유저 우선, 비로그인 시 클라이언트가 보낸 guestId 사용
  */
 const admin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -49,14 +49,14 @@ async function getAuthUserId(): Promise<string | null> {
 export async function POST(request: NextRequest) {
     await ensureSchema()
 
-    // 인증 확인
-    const authUserId = await getAuthUserId()
+    const body = await request.json()
+    const { action } = body
+
+    // 인증: 로그인 유저 우선, 없으면 클라이언트가 보낸 hostId(게스트 ID) 사용
+    const authUserId = await getAuthUserId() || body.hostId || body.userId
     if (!authUserId) {
         return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 })
     }
-
-    const body = await request.json()
-    const { action } = body
 
     // ── 방 생성 ──
     if (action === 'create') {

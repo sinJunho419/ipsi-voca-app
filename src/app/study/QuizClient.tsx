@@ -190,21 +190,21 @@ export default function QuizClient({ words, onExit, onFinish }: Props) {
                 <p className={isSuccess ? styles.resultSuccess : styles.resultFail}>
                     {isSuccess ? '성공! (90% 이상)' : '90% 이상이면 성공입니다'}
                 </p>
-                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                <div style={{ display: 'flex', gap: '0.5rem', width: '100%' }}>
                     <motion.button
                         className={styles.retryBtn}
                         onClick={initQuiz}
                         whileTap={{ scale: 0.93 }}
                         transition={spring}
-                    >🔄 다시 풀기</motion.button>
+                    >다시 풀기</motion.button>
                     {onExit && (
                         <motion.button
                             className={styles.retryBtn}
                             onClick={onExit}
                             whileTap={{ scale: 0.93 }}
                             transition={spring}
-                            style={{ background: 'linear-gradient(135deg, #64748b, #94a3b8)' }}
-                        >✕ 나가기</motion.button>
+                            style={{ background: 'linear-gradient(135deg, #475569, #64748b)' }}
+                        >나가기</motion.button>
                     )}
                 </div>
             </motion.div>
@@ -273,7 +273,7 @@ export default function QuizClient({ words, onExit, onFinish }: Props) {
                     }
                     return (
                         <motion.button
-                            key={i}
+                            key={`${index}-${i}`}
                             className={cls}
                             onClick={() => handleSelect(opt)}
                             disabled={selected !== null}
