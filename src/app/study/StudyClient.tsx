@@ -44,6 +44,12 @@ export default function StudyClient({ initialWords, initialMaxSet }: Props) {
     const [words, setWords] = useState<Word[]>([])
     const isReady = level !== null && setNo !== null
 
+    // 세트별 진도 (localStorage 기반)
+    const [setProgressMap, setSetProgressMap] = useState<Record<string, number>>({})
+    // 커스텀 세트 드롭다운 열림 상태
+    const [setDropdownOpen, setSetDropdownOpen] = useState(false)
+    const setDropdownRef = useRef<HTMLDivElement>(null)
+
     // 성공 횟수 & 메달 (level+set 별 localStorage 저장)
     const [successCount, setSuccessCount] = useState(0)
     const [medalCount, setMedalCount] = useState(0)
@@ -59,6 +65,40 @@ export default function StudyClient({ initialWords, initialMaxSet }: Props) {
             setMedalCount(saved.medal ?? 0)
         } catch { setSuccessCount(0); setMedalCount(0) }
     }, [progressKey])
+
+    // 세트 목록이 바뀌면 각 세트의 진도를 localStorage에서 불러오기
+    useEffect(() => {
+        if (!level || availableSets.length === 0) return
+        const map: Record<string, number> = {}
+        for (const s of availableSets) {
+            const key = `progress_${level}_${s.type === 'idiom' ? 'idiom' : 'word'}_${s.setNo}`
+            try {
+                const saved = JSON.parse(localStorage.getItem(key) || '{}')
+                map[`${s.type === 'idiom' ? 'idiom' : 'word'}:${s.setNo}`] = saved.success ?? 0
+            } catch { map[`${s.type === 'idiom' ? 'idiom' : 'word'}:${s.setNo}`] = 0 }
+        }
+        setSetProgressMap(map)
+    }, [level, availableSets])
+
+    // 현재 세트 진도 변경 시 맵도 동기화
+    useEffect(() => {
+        if (!progressKey || setNo === null) return
+        const mapKey = `${setType}:${setNo}`
+        setSetProgressMap(prev => ({ ...prev, [mapKey]: successCount }))
+    }, [successCount, progressKey, setNo, setType])
+
+    // 드롭다운 외부 클릭 시 닫기
+    useEffect(() => {
+        function handleClickOutside(e: MouseEvent) {
+            if (setDropdownRef.current && !setDropdownRef.current.contains(e.target as Node)) {
+                setSetDropdownOpen(false)
+            }
+        }
+        if (setDropdownOpen) {
+            document.addEventListener('mousedown', handleClickOutside)
+            return () => document.removeEventListener('mousedown', handleClickOutside)
+        }
+    }, [setDropdownOpen])
 
     function saveProgress(success: number, medal: number) {
         if (!progressKey) return
@@ -182,34 +222,78 @@ export default function StudyClient({ initialWords, initialMaxSet }: Props) {
                     {/* 1줄: 학년 & 세트 선택 */}
                     <div className={styles.selectRow}>
                         <select value={level ?? ''} onChange={e => changeLevel((e.target.value || null) as Level | null)} disabled={isPending}>
-                            <option value="" disabled>티어 선택</option>
+                            <option value="" disabled>Tier 선택</option>
                             {TIER_LEVELS.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
                         </select>
-                        <select value={setNo !== null ? `${setType}:${setNo}` : ''} onChange={e => changeSet(e.target.value)} disabled={isPending || !level}>
-                            <option value="" disabled>Set 선택</option>
-                            {(() => {
+                        <div className={styles.setDropdownWrap} ref={setDropdownRef}>
+                            <button
+                                className={styles.setDropdownBtn}
+                                onClick={() => level && !isPending && setSetDropdownOpen(v => !v)}
+                                disabled={isPending || !level}
+                                type="button"
+                            >
+                                <span>{setNo !== null ? getSetLabel(setType === 'idiom' ? 'idiom' : 'word', level!, setNo) : 'Set 선택'}</span>
+                                <span className={`${styles.setDropdownArrow} ${setDropdownOpen ? styles.setDropdownArrowOpen : ''}`}>&#9662;</span>
+                            </button>
+                            {setDropdownOpen && level && (() => {
                                 const wSets = availableSets.filter(s => s.type !== 'idiom')
                                 const iSets = availableSets.filter(s => s.type === 'idiom')
                                 return (
-                                    <>
+                                    <div className={styles.setDropdownPanel}>
                                         {wSets.length > 0 && (
-                                            <optgroup label="단어 세트">
-                                                {wSets.map(s => (
-                                                    <option key={`w-${s.setNo}`} value={`word:${s.setNo}`}>{getSetLabel('word', level!, s.setNo)}</option>
-                                                ))}
-                                            </optgroup>
+                                            <>
+                                                <div className={styles.setDropdownGroup}>단어 세트</div>
+                                                {wSets.map(s => {
+                                                    const key = `word:${s.setNo}`
+                                                    const sc = setProgressMap[key] ?? 0
+                                                    const isSelected = setType === 'word' && setNo === s.setNo
+                                                    return (
+                                                        <button
+                                                            key={`w-${s.setNo}`}
+                                                            className={`${styles.setDropdownItem} ${isSelected ? styles.setDropdownItemActive : ''}`}
+                                                            onClick={() => { changeSet(key); setSetDropdownOpen(false) }}
+                                                            type="button"
+                                                        >
+                                                            <span className={styles.setDropdownLabel}>{getSetLabel('word', level, s.setNo)}</span>
+                                                            <span className={styles.setDropdownDots}>
+                                                                {[0, 1, 2].map(i => (
+                                                                    <span key={i} className={`${styles.setDot} ${i < sc ? styles.setDotFilled : ''}`} />
+                                                                ))}
+                                                            </span>
+                                                        </button>
+                                                    )
+                                                })}
+                                            </>
                                         )}
                                         {iSets.length > 0 && (
-                                            <optgroup label="숙어 세트">
-                                                {iSets.map(s => (
-                                                    <option key={`i-${s.setNo}`} value={`idiom:${s.setNo}`}>{getSetLabel('idiom', level!, s.setNo)}</option>
-                                                ))}
-                                            </optgroup>
+                                            <>
+                                                <div className={styles.setDropdownGroup}>숙어 세트</div>
+                                                {iSets.map(s => {
+                                                    const key = `idiom:${s.setNo}`
+                                                    const sc = setProgressMap[key] ?? 0
+                                                    const isSelected = setType === 'idiom' && setNo === s.setNo
+                                                    return (
+                                                        <button
+                                                            key={`i-${s.setNo}`}
+                                                            className={`${styles.setDropdownItem} ${isSelected ? styles.setDropdownItemActive : ''}`}
+                                                            onClick={() => { changeSet(key); setSetDropdownOpen(false) }}
+                                                            type="button"
+                                                        >
+                                                            <span className={styles.setDropdownLabel}>{getSetLabel('idiom', level, s.setNo)}</span>
+                                                            <span className={styles.setDropdownDots}>
+                                                                {[0, 1, 2].map(i => (
+                                                                    <span key={i} className={`${styles.setDot} ${i < sc ? styles.setDotFilled : ''}`} />
+                                                                ))}
+                                                            </span>
+                                                        </button>
+                                                    )
+                                                })}
+                                            </>
                                         )}
-                                    </>
+                                    </div>
                                 )
                             })()}
-                        </select>
+                        </div>
                     </div>
 
                     {/* 2줄: 주요 액션 버튼 */}

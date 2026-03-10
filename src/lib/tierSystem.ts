@@ -38,13 +38,13 @@ export function getTierColor(level: Level): string {
 
 /** 전체 레벨 목록 (셀렉트 옵션용) - 티어 이름 포함 */
 export const TIER_LEVELS: { value: Level; label: string }[] = [
-    { value: 'elem_3', label: 'Rookie (초3)' },
-    { value: 'elem_4', label: 'Starter (초4)' },
-    { value: 'elem_5', label: 'Bronze (초5)' },
-    { value: 'elem_6', label: 'Silver (초6)' },
-    { value: 'mid_1',  label: 'Gold (중1)' },
-    { value: 'mid_2',  label: 'Platinum (중2)' },
-    { value: 'mid_3',  label: 'Diamond (중3)' },
-    { value: 'high_1', label: 'Challenger (고1)' },
-    { value: 'high_2', label: 'GrandMaster (고2)' },
+    { value: 'elem_3', label: 'Rookie' },
+    { value: 'elem_4', label: 'Starter' },
+    { value: 'elem_5', label: 'Bronze' },
+    { value: 'elem_6', label: 'Silver' },
+    { value: 'mid_1',  label: 'Gold' },
+    { value: 'mid_2',  label: 'Platinum' },
+    { value: 'mid_3',  label: 'Diamond' },
+    { value: 'high_1', label: 'Challenger' },
+    { value: 'high_2', label: 'GrandMaster' },
 ]
