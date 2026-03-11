@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
         }
 
         // ── 5. 입시내비 API 호출 → 회원 상태 확인 ────────────────────
-        const verifyApiUrl = 'https://m.ipsinavi.com/include/ipsivoca_Api.asp'
+        const verifyApiUrl = 'https://m.ipsinavi.com/api/ipsivoca_Api.asp'
 
         let memberStatus: string
         try {
