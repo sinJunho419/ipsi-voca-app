@@ -2,74 +2,113 @@
 ' ============================================================
 '  입시보카 연동용 XOR 암호화 (Classic ASP / VBScript)
 '
-'  암호화 방식: XOR + Base64
+'  암호화 방식: UTF-8 바이트 단위 XOR + Base64
 '  평문 형식:   nid|name|timestamp (파이프 구분)
 '  타임스탬프:  Unix epoch 초 (KST 기준)
 '  유효시간:    5분
 '
-'  POST 대상:   https://voca-app.com/api/auth/verify
+'  POST 대상:   https://ipsi-voca-app.vercel.app/api/auth/verify
 '  파라미터:    payload (form hidden field)
+'
+'  ※ 주의: 기존 Asc()/Chr() 방식은 한글 등 멀티바이트 문자에서
+'          ANSI↔UTF-8 인코딩 불일치가 발생합니다.
+'          반드시 아래의 바이트 단위 방식을 사용하세요.
 ' ============================================================
 
-Const SECRET_KEY = "여기에_양쪽_동일한_시크릿키_20자이상"
+Const SECRET_KEY = "ipsinaviabcdefg12345678dasineduttjdnftlthdvkrnfhflavlrfh300"
 
 
-' ── XOR 암호화 ──────────────────────────────────────────────
-Function XorEncrypt(plainText, key)
-    Dim i, c, k, result
-    result = ""
-    For i = 1 To Len(plainText)
-        c = Asc(Mid(plainText, i, 1))
-        k = Asc(Mid(key, ((i - 1) Mod Len(key)) + 1, 1))
-        result = result & Chr(c Xor k)
-    Next
-    XorEncrypt = result
-End Function
-
-
-' ── 문자열을 UTF-8 바이너리로 변환 ──────────────────────────
-Function Stream_StringToBinary(str)
+' ── UTF-8 바이트 배열 구하기 (BOM 제거) ───────────────────────
+Function GetUTF8Bytes(str)
     Dim stream
     Set stream = Server.CreateObject("ADODB.Stream")
-    stream.Type = 2  ' adTypeText
+    stream.Type = 2          ' adTypeText
     stream.Charset = "utf-8"
     stream.Open
     stream.WriteText str
     stream.Position = 0
-    stream.Type = 1  ' adTypeBinary
-    Stream_StringToBinary = stream.Read
+    stream.Type = 1           ' adTypeBinary
+    stream.Position = 3       ' UTF-8 BOM (EF BB BF) 건너뛰기
+    GetUTF8Bytes = stream.Read
     stream.Close
     Set stream = Nothing
 End Function
 
 
-' ── Base64 인코딩 ───────────────────────────────────────────
-Function Base64Encode(str)
-    Dim xml, node
-    Set xml = Server.CreateObject("MSXML2.DOMDocument")
-    Set node = xml.createElement("b64")
-    node.dataType = "bin.base64"
-    node.nodeTypedValue = Stream_StringToBinary(str)
-    Base64Encode = Replace(Replace(node.text, vbLf, ""), vbCr, "")
-    Set node = Nothing
-    Set xml = Nothing
+' ── 바이트 배열 → Hex 문자열 ──────────────────────────────────
+Function BytesToHex(bytes)
+    Dim dom, el
+    Set dom = Server.CreateObject("MSXML2.DOMDocument")
+    Set el = dom.createElement("tmp")
+    el.dataType = "bin.hex"
+    el.nodeTypedValue = bytes
+    BytesToHex = el.text
+    Set el = Nothing
+    Set dom = Nothing
 End Function
 
 
-' ── 사용 예시 ───────────────────────────────────────────────
-Dim nid, userName, ts, plainText, encrypted, payload
+' ── Hex 문자열 → Base64 문자열 변환 ──────────────────────────
+Function HexToBase64(hexStr)
+    Dim dom, hexEl, b64El
+    Set dom = Server.CreateObject("MSXML2.DOMDocument")
+
+    Set hexEl = dom.createElement("hex")
+    hexEl.dataType = "bin.hex"
+    hexEl.text = hexStr
+
+    Set b64El = dom.createElement("b64")
+    b64El.dataType = "bin.base64"
+    b64El.nodeTypedValue = hexEl.nodeTypedValue
+
+    HexToBase64 = Replace(Replace(b64El.text, vbLf, ""), vbCr, "")
+    Set hexEl = Nothing
+    Set b64El = Nothing
+    Set dom = Nothing
+End Function
+
+
+' ── XOR 암호화 (UTF-8 바이트 단위) → Base64 출력 ─────────────
+'    평문과 키를 각각 UTF-8 바이트로 변환 후 바이트 단위 XOR
+'    결과를 Base64 문자열로 반환
+Function XorEncryptBase64(plainText, key)
+    Dim textBytes, keyBytesArr
+    textBytes = GetUTF8Bytes(plainText)
+    keyBytesArr = GetUTF8Bytes(key)
+
+    Dim textHex, keyHex
+    textHex = BytesToHex(textBytes)
+    keyHex = BytesToHex(keyBytesArr)
+
+    Dim i, tLen, kLen, xorHex
+    tLen = Len(textHex) / 2
+    kLen = Len(keyHex) / 2
+    xorHex = ""
+
+    For i = 0 To tLen - 1
+        Dim tb, kb
+        tb = CLng("&H" & Mid(textHex, i * 2 + 1, 2))
+        kb = CLng("&H" & Mid(keyHex, (i Mod kLen) * 2 + 1, 2))
+        xorHex = xorHex & Right("0" & Hex(tb Xor kb), 2)
+    Next
+
+    XorEncryptBase64 = HexToBase64(xorHex)
+End Function
+
+
+' ── 사용 예시 ─────────────────────────────────────────────────
+Dim nid, userName, ts, plainText, payload
 
 nid = "12345"                ' 회원 NID
 userName = "홍길동"           ' 회원 이름
 ts = DateDiff("s", "1970/1/1 09:00:00", Now())  ' KST Unix timestamp
 
 plainText = nid & "|" & userName & "|" & ts
-encrypted = XorEncrypt(plainText, SECRET_KEY)
-payload = Base64Encode(encrypted)
+payload = XorEncryptBase64(plainText, SECRET_KEY)
 %>
 
 <!-- 입시보카를 새 창으로 열기 -->
-<form method="POST" action="https://voca-app.com/api/auth/verify" target="_blank">
+<form method="POST" action="https://ipsi-voca-app.vercel.app/api/auth/verify" target="_blank">
     <input type="hidden" name="payload" value="<%=payload%>">
     <button type="submit">입시보카 열기</button>
 </form>

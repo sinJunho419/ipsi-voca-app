@@ -9,9 +9,9 @@ const FIVE_MINUTES = 5 * 60
  * 입시내비 → 입시보카 인증
  *
  * POST /api/auth/verify
- * Body: payload=Base64(XOR(nid|name|timestamp, secretKey))
+ * Body: payload=Base64(XOR(UTF8(nid|name|timestamp), UTF8(secretKey)))
  *
- * 암호화 방식: XOR + Base64 (Classic ASP 순수 VBScript 호환)
+ * 암호화 방식: UTF-8 바이트 단위 XOR + Base64 (Classic ASP 순수 VBScript 호환)
  *
  * 흐름:
  * 1. Base64 디코딩 → XOR 복호화
