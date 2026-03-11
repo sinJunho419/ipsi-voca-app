@@ -105,6 +105,7 @@ export async function POST(request: NextRequest) {
         }
         */
 
+        /* ── 디버그 확인 후 아래 주석 해제 ──
         // ── 4. 타임스탬프 유효성 (5분) ───────────────────────────────
         const now = Math.floor(Date.now() / 1000)
         if (Math.abs(now - ts) > FIVE_MINUTES) {
@@ -244,6 +245,7 @@ export async function POST(request: NextRequest) {
         // ── 9. /study 리다이렉트 (Supabase 세션 쿠키 이미 설정됨) ────
         const origin = `${request.nextUrl.protocol}//${request.nextUrl.host}`
         return NextResponse.redirect(`${origin}/study`)
+        ── 디버그 주석 끝 ── */
 
     } catch (err) {
         console.error('Verify error:', err)
