@@ -238,6 +238,32 @@ export async function POST(request: NextRequest) {
     }
 }
 
+/** 디버그용 GET 핸들러 - 라우트 존재 확인 */
+export async function GET(request: NextRequest) {
+    const url = request.url
+    const method = request.method
+    const headers = Object.fromEntries(request.headers.entries())
+
+    return new NextResponse(JSON.stringify({
+        ok: true,
+        message: 'verify 라우트 정상 동작',
+        url,
+        method,
+        timestamp: new Date().toISOString(),
+        env: {
+            VOCA_SECRET_KEY: process.env.VOCA_SECRET_KEY ? '설정됨' : '미설정',
+            SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL ? '설정됨' : '미설정',
+        },
+        headers: {
+            'content-type': headers['content-type'] || 'none',
+            'user-agent': headers['user-agent'] || 'none',
+        },
+    }, null, 2), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+    })
+}
+
 /** 경고창 + 입시내비로 리다이렉트하는 HTML 응답 */
 function errorPage(message: string, redirectUrl: string) {
     const html = `<!DOCTYPE html>
