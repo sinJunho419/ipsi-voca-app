@@ -79,19 +79,6 @@ export async function POST(request: NextRequest) {
 
         const parts = decrypted.split('|')
 
-        return debugPage({
-            '1_받은_payload': payload,
-            '2_payload_길이': payload.length,
-            '3_복호화_결과': decrypted,
-            '4_파이프_split': parts,
-            '5_nid': parts[0] || '(없음)',
-            '6_name': parts[1] || '(없음)',
-            '7_timestamp': parts[2] || '(없음)',
-            '8_시크릿키_길이': secretKey.length,
-            '9_시크릿키_앞5자': secretKey.substring(0, 5) + '...',
-        })
-
-        /* ── 디버그 확인 후 아래 코드 복원 필요 ──
         if (parts.length < 3) {
             return errorPage('비정상 접근입니다.', IPSI_NAVI_URL)
         }
@@ -103,9 +90,7 @@ export async function POST(request: NextRequest) {
         if (!nid || !name || isNaN(ts)) {
             return errorPage('비정상 접근입니다.', IPSI_NAVI_URL)
         }
-        */
 
-        /* ── 디버그 확인 후 아래 주석 해제 ──
         // ── 4. 타임스탬프 유효성 (5분) ───────────────────────────────
         const now = Math.floor(Date.now() / 1000)
         if (Math.abs(now - ts) > FIVE_MINUTES) {
@@ -117,22 +102,36 @@ export async function POST(request: NextRequest) {
 
         let memberStatus: string
         try {
-            // nid|timestamp를 같은 시크릿 키로 XOR 암호화해서 전송
-            const verifyPayload = xorEncryptToBase64(`${nid}|${now}`, secretKey)
+            // 복호화된 원본 데이터를 그대로 다시 암호화해서 전송
+            const verifyPayload = xorEncryptToBase64(decrypted, secretKey)
 
             const res = await fetch(verifyApiUrl, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ payload: verifyPayload }),
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `payload=${encodeURIComponent(verifyPayload)}`,
             })
 
             if (!res.ok) {
                 throw new Error(`입시내비 API responded ${res.status}`)
             }
 
-            const data = await res.json()
-            // 응답: { status: "active" | "inactive" | "fail01~04" | "Time Over" }
-            memberStatus = data.status
+            const rawText = await res.text()
+            console.log('입시내비 API 응답 원문:', rawText)
+
+            let data: Record<string, unknown>
+            try {
+                data = JSON.parse(rawText)
+            } catch {
+                console.error('입시내비 API JSON 파싱 실패:', rawText)
+                return errorPage('회원 정보를 확인할 수 없습니다.', IPSI_NAVI_URL)
+            }
+
+            console.log('입시내비 API 파싱 결과:', JSON.stringify(data))
+
+            // ASP 응답 구조에 맞게 status 추출 (status, result, message 등 가능)
+            memberStatus = String(
+                data.status ?? data.result ?? data.message ?? data.msg ?? ''
+            )
         } catch (err) {
             console.error('입시내비 API call failed:', err)
             return errorPage('회원 정보를 확인할 수 없습니다.', IPSI_NAVI_URL)
@@ -245,7 +244,6 @@ export async function POST(request: NextRequest) {
         // ── 9. /study 리다이렉트 (Supabase 세션 쿠키 이미 설정됨) ────
         const origin = `${request.nextUrl.protocol}//${request.nextUrl.host}`
         return NextResponse.redirect(`${origin}/study`)
-        ── 디버그 주석 끝 ── */
 
     } catch (err) {
         console.error('Verify error:', err)
