@@ -59,14 +59,18 @@ export async function POST(request: NextRequest) {
             payload = body.payload
         }
 
+        // ── 디버그 모드: payload 복호화 결과를 화면에 표시 ─────────
+        const debugMode = process.env.VOCA_DEBUG === 'true'
+
         if (!payload) {
+            if (debugMode) return debugPage({ error: 'payload가 없습니다', contentType })
             return errorPage('잘못된 요청입니다.', IPSI_NAVI_URL)
         }
 
         // ── 2. XOR 복호화 ────────────────────────────────────────────
         const secretKey = process.env.VOCA_SECRET_KEY?.trim()
         if (!secretKey) {
-            console.error('VOCA_SECRET_KEY is not set')
+            if (debugMode) return debugPage({ error: 'VOCA_SECRET_KEY 미설정', payload })
             return errorPage('서버 설정 오류입니다.', IPSI_NAVI_URL)
         }
 
@@ -74,12 +78,30 @@ export async function POST(request: NextRequest) {
         let decrypted: string
         try {
             decrypted = xorDecrypt(encrypted, secretKey)
-        } catch {
+        } catch (e) {
+            if (debugMode) return debugPage({ error: '복호화 실패', payload, encrypted_length: encrypted.length, detail: String(e) })
             return errorPage('비정상 접근입니다.', IPSI_NAVI_URL)
         }
 
         // ── 3. 복호화된 데이터 파싱: nid|name|timestamp ──────────────
         const parts = decrypted.split('|')
+
+        if (debugMode) {
+            return debugPage({
+                payload,
+                payload_length: payload.length,
+                encrypted_bytes: encrypted.length,
+                decrypted,
+                parts,
+                parts_count: parts.length,
+                nid: parts[0] || '(없음)',
+                name: parts[1] || '(없음)',
+                timestamp: parts[2] || '(없음)',
+                secretKey_length: secretKey.length,
+                secretKey_first5: secretKey.substring(0, 5) + '...',
+            })
+        }
+
         if (parts.length < 3) {
             return errorPage('비정상 접근입니다.', IPSI_NAVI_URL)
         }
@@ -261,6 +283,31 @@ export async function GET(request: NextRequest) {
     }, null, 2), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
+    })
+}
+
+/** 디버그 정보를 화면에 표시 (VOCA_DEBUG=true 일 때만) */
+function debugPage(data: Record<string, unknown>) {
+    const html = `<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>입시보카 - 디버그</title>
+<style>
+body { font-family: monospace; background: #1a1a2e; color: #eee; padding: 20px; }
+h1 { color: #6C63FF; }
+pre { background: #16213e; padding: 16px; border-radius: 8px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
+.key { color: #fbbf24; }
+.val { color: #34d399; }
+</style>
+</head>
+<body>
+<h1>🔍 Verify 디버그</h1>
+<pre>${JSON.stringify(data, null, 2)}</pre>
+</body>
+</html>`
+
+    return new NextResponse(html, {
+        status: 200,
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
     })
 }
 
