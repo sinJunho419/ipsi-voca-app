@@ -59,19 +59,14 @@ export async function POST(request: NextRequest) {
             payload = body.payload
         }
 
-        // ── 디버그 모드: payload 복호화 결과를 화면에 표시 ─────────
-        const debugMode = process.env.VOCA_DEBUG === 'true'
-
+        // ── 임시 디버그: 무조건 복호화 결과를 화면에 표시 ─────────
         if (!payload) {
-            if (debugMode) return debugPage({ error: 'payload가 없습니다', contentType })
-            return errorPage('잘못된 요청입니다.', IPSI_NAVI_URL)
+            return debugPage({ error: 'payload가 없습니다', contentType })
         }
 
-        // ── 2. XOR 복호화 ────────────────────────────────────────────
         const secretKey = process.env.VOCA_SECRET_KEY?.trim()
         if (!secretKey) {
-            if (debugMode) return debugPage({ error: 'VOCA_SECRET_KEY 미설정', payload })
-            return errorPage('서버 설정 오류입니다.', IPSI_NAVI_URL)
+            return debugPage({ error: 'VOCA_SECRET_KEY 미설정', payload })
         }
 
         const encrypted = Buffer.from(payload, 'base64')
@@ -79,29 +74,24 @@ export async function POST(request: NextRequest) {
         try {
             decrypted = xorDecrypt(encrypted, secretKey)
         } catch (e) {
-            if (debugMode) return debugPage({ error: '복호화 실패', payload, encrypted_length: encrypted.length, detail: String(e) })
-            return errorPage('비정상 접근입니다.', IPSI_NAVI_URL)
+            return debugPage({ error: '복호화 실패', payload, detail: String(e) })
         }
 
-        // ── 3. 복호화된 데이터 파싱: nid|name|timestamp ──────────────
         const parts = decrypted.split('|')
 
-        if (debugMode) {
-            return debugPage({
-                payload,
-                payload_length: payload.length,
-                encrypted_bytes: encrypted.length,
-                decrypted,
-                parts,
-                parts_count: parts.length,
-                nid: parts[0] || '(없음)',
-                name: parts[1] || '(없음)',
-                timestamp: parts[2] || '(없음)',
-                secretKey_length: secretKey.length,
-                secretKey_first5: secretKey.substring(0, 5) + '...',
-            })
-        }
+        return debugPage({
+            '1_받은_payload': payload,
+            '2_payload_길이': payload.length,
+            '3_복호화_결과': decrypted,
+            '4_파이프_split': parts,
+            '5_nid': parts[0] || '(없음)',
+            '6_name': parts[1] || '(없음)',
+            '7_timestamp': parts[2] || '(없음)',
+            '8_시크릿키_길이': secretKey.length,
+            '9_시크릿키_앞5자': secretKey.substring(0, 5) + '...',
+        })
 
+        /* ── 디버그 확인 후 아래 코드 복원 필요 ──
         if (parts.length < 3) {
             return errorPage('비정상 접근입니다.', IPSI_NAVI_URL)
         }
@@ -113,6 +103,7 @@ export async function POST(request: NextRequest) {
         if (!nid || !name || isNaN(ts)) {
             return errorPage('비정상 접근입니다.', IPSI_NAVI_URL)
         }
+        */
 
         // ── 4. 타임스탬프 유효성 (5분) ───────────────────────────────
         const now = Math.floor(Date.now() / 1000)
