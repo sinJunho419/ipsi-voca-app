@@ -70,16 +70,20 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
 
             if (isMounted) setUserId(uid)
 
-            const { data: roomData, error } = await supabase
-                .from('battle_rooms')
-                .select('*')
-                .eq('id', roomId)
-                .single()
+            // 서버 API로 방 조회 (admin client → RLS 우회)
+            const res = await fetch('/api/battle', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'get', roomId, userId: uid }),
+            })
 
-            if (error || !roomData) {
+            const result = await res.json()
+            if (!res.ok || !result.room) {
                 if (isMounted) setErrorMsg('방을 찾을 수 없습니다.')
                 return
             }
+
+            const roomData = result.room
 
             if (isMounted) {
                 setRoom(roomData)

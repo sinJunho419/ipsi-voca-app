@@ -327,17 +327,20 @@ function LobbyContent() {
 
             const odlId = await getUserId(supabase)
 
-            // 방 코드로 방 조회 (SELECT은 RLS가 true이므로 anon도 가능)
-            const { data: room, error: findError } = await supabase
-                .from('battle_rooms')
-                .select('id, participant_ids, max_players, status')
-                .eq('room_code', joinCode.toUpperCase())
-                .single()
+            // 서버 API로 방 조회 (admin client → RLS 우회)
+            const findRes = await fetch('/api/battle', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'find', roomCode: joinCode.toUpperCase(), userId: odlId }),
+            })
 
-            if (findError || !room) {
-                setErrorMsg('존재하지 않는 방 코드입니다.')
+            const findResult = await findRes.json()
+            if (!findRes.ok || !findResult.room) {
+                setErrorMsg(findResult.error || '존재하지 않는 방 코드입니다.')
                 return
             }
+
+            const room = findResult.room
 
             if (room.status !== 'waiting') {
                 setErrorMsg('이미 게임이 진행 중이거나 종료된 방입니다.')

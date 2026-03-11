@@ -58,6 +58,40 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 })
     }
 
+    // ── 방 조회 (ID) ──
+    if (action === 'get') {
+        const { roomId } = body
+
+        const { data: room, error } = await admin
+            .from('battle_rooms')
+            .select('*')
+            .eq('id', roomId)
+            .single()
+
+        if (error || !room) {
+            return NextResponse.json({ error: '방을 찾을 수 없습니다.' }, { status: 404 })
+        }
+
+        return NextResponse.json({ room })
+    }
+
+    // ── 방 조회 (코드) ──
+    if (action === 'find') {
+        const { roomCode } = body
+
+        const { data: room, error } = await admin
+            .from('battle_rooms')
+            .select('id, participant_ids, max_players, status')
+            .eq('room_code', roomCode.toUpperCase())
+            .single()
+
+        if (error || !room) {
+            return NextResponse.json({ error: '존재하지 않는 방 코드입니다.' }, { status: 404 })
+        }
+
+        return NextResponse.json({ room })
+    }
+
     // ── 방 생성 ──
     if (action === 'create') {
         const { roomCode, level, setNo, questionIds, questionCount } = body

@@ -9,18 +9,20 @@ function SsoRedirector() {
     const params = useSearchParams()
 
     useEffect(() => {
-        const userId = params.get('user_id')
-        const ts = params.get('ts')
+        const nid = params.get('nid')
         const token = params.get('token')
+        const sname = params.get('sname')   // 선택
+        const userId = params.get('user_id') // 선택
 
-        if (!userId || !ts || !token) return
+        if (!nid || !token) return
 
         // 로딩 화면을 1.2초 보여준 뒤 SSO API로 이동
         const timer = setTimeout(() => {
             const url = new URL('/api/auth/sso', window.location.origin)
-            url.searchParams.set('user_id', userId)
-            url.searchParams.set('ts', ts)
+            url.searchParams.set('nid', nid)
             url.searchParams.set('token', token)
+            if (sname) url.searchParams.set('sname', sname)
+            if (userId) url.searchParams.set('user_id', userId)
             window.location.href = url.toString()
         }, 1200)
 
@@ -32,7 +34,7 @@ function SsoRedirector() {
 
 /**
  * 입시내비 SSO 로딩 화면
- * 입시내비 서버에서 /sso?user_id=...&ts=...&token=... 로 리다이렉트하면
+ * 입시내비 서버에서 /sso?nid=...&sname=...&token=... 로 리다이렉트하면
  * 이 인증 화면을 보여준 후 /api/auth/sso → Supabase 세션 → /study 로 이동합니다.
  */
 export default function SsoPage() {

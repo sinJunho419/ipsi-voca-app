@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import KakaoRedirect from '@/components/KakaoRedirect'
+import TabGuard from '@/components/TabGuard'
 
 export const metadata: Metadata = {
   title: '📚 영단어 학습',
@@ -19,6 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <KakaoRedirect />
+        <TabGuard />
         {children}
       </body>
     </html>
