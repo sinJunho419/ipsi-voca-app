@@ -190,7 +190,13 @@ export async function POST(request: NextRequest) {
 
         // ── 302 redirect to /study (HTML 반환 X → iPhone 호환) ──
         const origin = `${request.nextUrl.protocol}//${request.nextUrl.host}`
-        return NextResponse.redirect(`${origin}/study?welcome=${encodeURIComponent(displayName)}`, 302)
+        const response = NextResponse.redirect(`${origin}/study`, 302)
+        response.cookies.set('welcome_name', displayName, {
+            maxAge: 30,
+            path: '/',
+            httpOnly: false,
+        })
+        return response
 
     } catch (err) {
         console.error('Verify error:', err)

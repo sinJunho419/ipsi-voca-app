@@ -7,7 +7,7 @@ import type { Word, Level } from '@/types/vocabulary'
 import { getSetLabel } from '@/lib/setAliases'
 import { TIER_LEVELS } from '@/lib/tierSystem'
 import styles from './study.module.css'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import QuizClient from './QuizClient'
 import MasterChallengeClient from './MasterChallengeClient'
 import WrongWordsClient from './WrongWordsClient'
@@ -35,19 +35,22 @@ const spring: Transition = { type: 'spring', stiffness: 420, damping: 30 }
 export default function StudyClient({ initialWords, initialMaxSet }: Props) {
     const supabase = createClient()
     const router = useRouter()
-    const searchParams = useSearchParams()
-
-    // 환영 오버레이
-    const welcomeName = searchParams.get('welcome')
-    const [showWelcome, setShowWelcome] = useState(!!welcomeName)
+    // 환영 오버레이 (쿠키에서 이름 읽기)
+    const [welcomeName, setWelcomeName] = useState<string | null>(null)
+    const [showWelcome, setShowWelcome] = useState(false)
 
     useEffect(() => {
-        if (!welcomeName) return
-        // URL에서 welcome 파라미터 제거
-        window.history.replaceState({}, '', '/study')
+        const match = document.cookie.match(/(?:^|;\s*)welcome_name=([^;]*)/)
+        if (!match) return
+        const name = decodeURIComponent(match[1])
+        if (!name) return
+        setWelcomeName(name)
+        setShowWelcome(true)
+        // 쿠키 즉시 삭제
+        document.cookie = 'welcome_name=; max-age=0; path=/'
         const timer = setTimeout(() => setShowWelcome(false), 1800)
         return () => clearTimeout(timer)
-    }, [welcomeName])
+    }, [])
 
     const [tab, setTab] = useState<Tab>('study')
     const [level, setLevel] = useState<Level | null>(null)
