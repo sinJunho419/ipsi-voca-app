@@ -160,9 +160,11 @@ export async function POST(request: NextRequest) {
             user_metadata: { nid, sname: displayName, source: 'inputnavi' },
         }).catch(() => {})
 
-        adminClient.from('profiles').upsert(
-            { id: userId, name: displayName },
-            { onConflict: 'id' }
+        Promise.resolve(
+            adminClient.from('profiles').upsert(
+                { id: userId, name: displayName },
+                { onConflict: 'id' }
+            )
         ).catch(() => {})
 
         console.log(`[auth] ${nid} 완료 +${Date.now() - t0}ms`)
