@@ -87,6 +87,8 @@ function loadingPage(payload: string, userName: string, ipsiNaviUrl: string) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>입시보카 - 로그인 중</title>
+<link rel="prefetch" href="/study" />
+<link rel="dns-prefetch" href="${process.env.NEXT_PUBLIC_SUPABASE_URL || ''}" />
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {

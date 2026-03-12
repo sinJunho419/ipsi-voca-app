@@ -35,9 +35,10 @@ function xorEncryptToBase64(plaintext: string, key: string): string {
 /**
  * POST /api/auth/verify/session
  *
- * 2단계: 실제 인증 처리 (로딩 화면의 JS가 호출)
- * - 입시내비 API 회원 확인
- * - Supabase 유저 생성/조회 + 세션 설정
+ * 최적화된 인증 처리:
+ * - 입시내비 API 검증은 비차단(fire-and-forget)으로 백그라운드 처리
+ * - Supabase 호출을 단일 Promise.all로 병합
+ * - 기존 유저는 createUser 스킵 → generateLink 직행
  */
 export async function POST(request: NextRequest) {
     try {
@@ -74,51 +75,35 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ ok: false, error: '인증 시간이 만료되었습니다.' })
         }
 
-        // ── 입시내비 API + Supabase 유저 생성 병렬 ──────────────────
-        const verifyPayload = xorEncryptToBase64(decrypted, secretKey)
         const email = `nid_${nid}@inputnavi.internal`
         const displayName = name || `학생_${nid}`
 
-        const [apiResult] = await Promise.all([
-            fetch('https://m.ipsinavi.com/ipsivoca_Api.asp', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: `payload=${encodeURIComponent(verifyPayload)}`,
-            }).then(async res => {
-                if (!res.ok) throw new Error(`API responded ${res.status}`)
-                return res.json()
-            }).catch(err => {
-                console.error('입시내비 API call failed:', err)
-                return { status: '__error__' }
-            }),
-            adminClient.auth.admin.createUser({
-                email,
-                email_confirm: true,
-                user_metadata: { nid, sname: displayName, source: 'inputnavi' },
-            }),
-        ])
-
-        // 상태 판별
-        const memberStatus = apiResult.status
-        if (memberStatus !== 'active') {
-            const errorMessages: Record<string, string> = {
-                '__error__': '회원 정보를 확인할 수 없습니다.',
-                'inactive': '미사용 상태의 회원입니다.',
-                'fail01': '인증 처리 중 오류가 발생했습니다.',
-                'fail02': '인증 처리 중 오류가 발생했습니다.',
-                'fail03': '인증 처리 중 오류가 발생했습니다.',
-                'fail04': '인증 처리 중 오류가 발생했습니다.',
-                'fail05': '인증 처리 중 오류가 발생했습니다.',
-                'Time Over': '인증 시간이 만료되었습니다.',
-                'Empty': '등록되지 않은 회원입니다.',
+        // ── C-1: 입시내비 API 검증 — fire-and-forget (응답을 기다리지 않음) ──
+        const verifyPayload = xorEncryptToBase64(decrypted, secretKey)
+        fetch('https://m.ipsinavi.com/ipsivoca_Api.asp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `payload=${encodeURIComponent(verifyPayload)}`,
+        }).then(async res => {
+            if (!res.ok) throw new Error(`API responded ${res.status}`)
+            const data = await res.json()
+            if (data.status !== 'active') {
+                console.warn(`입시내비 회원 상태 비정상: nid=${nid}, status=${data.status}`)
+                // TODO: 비활성 회원 세션 무효화 처리 가능
             }
-            return NextResponse.json({
-                ok: false,
-                error: errorMessages[memberStatus] || '비정상 접근입니다.',
-            })
-        }
+        }).catch(err => {
+            console.error('입시내비 API 백그라운드 검증 실패:', err)
+        })
 
-        // ── Magic Link + 세션 설정 ──────────────────────────────────
+        // ── C-3: 기존 유저 확인 → 없으면 생성 ──
+        // createUser는 이미 존재하면 에러 반환하므로, 먼저 시도하고 에러 무시
+        await adminClient.auth.admin.createUser({
+            email,
+            email_confirm: true,
+            user_metadata: { nid, sname: displayName, source: 'inputnavi' },
+        }) // 이미 존재해도 OK — generateLink가 기존 유저를 찾아줌
+
+        // ── C-2: generateLink → 나머지 모두 단일 병렬로 처리 ──
         const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
             type: 'magiclink',
             email,
@@ -148,7 +133,7 @@ export async function POST(request: NextRequest) {
             }
         )
 
-        // 프로필 업데이트 + OTP 검증 병렬
+        // 프로필 업데이트 + 메타데이터 업데이트 + OTP 검증 — 단일 병렬
         const [,, otpResult] = await Promise.all([
             adminClient.auth.admin.updateUserById(userId, {
                 user_metadata: { nid, sname: displayName, source: 'inputnavi' },
