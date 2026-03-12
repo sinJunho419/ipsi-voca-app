@@ -1,40 +1,14 @@
-import { createClient } from '@/lib/supabase/server'
-import type { Word } from '@/types/vocabulary'
 import StudyClient from './StudyClient'
 
-/** ISR: 60초 캐시 — 매 요청마다 Supabase 호출하지 않음 */
-export const revalidate = 60
-
 /**
- * Server Component: 초기 데이터(elem_low, Set 1)를 서버에서 미리 fetch해서
- * 페이지 첫 로드 시 클라이언트 fetch 없이 즉시 표시합니다.
+ * 정적 페이지: 서버 쿼리 없이 즉시 렌더링
+ * StudyClient가 level=null로 시작하므로 서버 데이터 불필요
  */
-export default async function StudyPage() {
-    const supabase = await createClient()
-
-    const [maxResult, wordsResult] = await Promise.all([
-        supabase
-            .from('words')
-            .select('set_no')
-            .eq('level', 'elem_3')
-            .order('set_no', { ascending: false })
-            .limit(1)
-            .single(),
-        supabase
-            .from('words')
-            .select('*')
-            .eq('level', 'elem_3')
-            .eq('set_no', 1)
-            .order('id'),
-    ])
-
-    const initialWords = (wordsResult.data ?? []) as Word[]
-    const initialMaxSet = maxResult.data?.set_no ?? 1
-
+export default function StudyPage() {
     return (
         <StudyClient
-            initialWords={initialWords}
-            initialMaxSet={initialMaxSet}
+            initialWords={[]}
+            initialMaxSet={1}
         />
     )
 }
