@@ -148,7 +148,8 @@ export async function POST(request: NextRequest) {
         const email = `nid_${nid}@inputnavi.internal`
         const displayName = name || `학생_${nid}`
 
-        const { error: createError } = await adminClient.auth.admin.createUser({
+        // 유저 생성 시도 (이미 있으면 무시)
+        await adminClient.auth.admin.createUser({
             email,
             email_confirm: true,
             user_metadata: {
@@ -158,37 +159,7 @@ export async function POST(request: NextRequest) {
             },
         })
 
-        if (createError && !createError.message.includes('already been registered')) {
-            console.error('User provisioning error:', createError.message)
-            return errorPage('사용자 등록에 실패했습니다.', IPSI_NAVI_URL)
-        }
-
-        // 기존 유저: 이름 최신화
-        if (createError?.message.includes('already been registered')) {
-            const { data: users } = await adminClient.auth.admin.listUsers()
-            const existingUser = users?.users?.find(u => u.email === email)
-            if (existingUser) {
-                await adminClient.auth.admin.updateUserById(existingUser.id, {
-                    user_metadata: { ...existingUser.user_metadata, sname: displayName },
-                })
-                await adminClient.from('profiles').upsert(
-                    { id: existingUser.id, name: displayName },
-                    { onConflict: 'id' }
-                )
-            }
-        } else {
-            // 신규 유저: profiles에 이름 저장
-            const { data: users } = await adminClient.auth.admin.listUsers()
-            const newUser = users?.users?.find(u => u.email === email)
-            if (newUser) {
-                await adminClient.from('profiles').upsert(
-                    { id: newUser.id, name: displayName },
-                    { onConflict: 'id' }
-                )
-            }
-        }
-
-        // ── 8. Magic Link → 서버에서 직접 세션 설정 ──────────────────
+        // ── 8. Magic Link 생성 (유저 정보도 함께 리턴됨) ─────────────
         const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
             type: 'magiclink',
             email,
@@ -198,6 +169,16 @@ export async function POST(request: NextRequest) {
             console.error('generateLink error:', linkError?.message)
             return errorPage('세션 생성에 실패했습니다.', IPSI_NAVI_URL)
         }
+
+        // generateLink가 리턴하는 user로 프로필 업데이트
+        const userId = linkData.user.id
+        await adminClient.auth.admin.updateUserById(userId, {
+            user_metadata: { nid, sname: displayName, source: 'inputnavi' },
+        })
+        await adminClient.from('profiles').upsert(
+            { id: userId, name: displayName },
+            { onConflict: 'id' }
+        )
 
         const cookieStore = await cookies()
         const serverClient = createServerClient(
