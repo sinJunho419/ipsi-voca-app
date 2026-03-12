@@ -35,12 +35,15 @@ function xorEncryptToBase64(plaintext: string, key: string): string {
 /**
  * POST /api/auth/verify/session
  *
- * 최적화된 인증 처리:
- * - 입시내비 API 검증은 비차단(fire-and-forget)으로 백그라운드 처리
- * - Supabase 호출을 단일 Promise.all로 병합
- * - 기존 유저는 createUser 스킵 → generateLink 직행
+ * 극한 최적화:
+ * - 입시내비 API: fire-and-forget
+ * - generateLink 먼저 시도 (재방문 유저 fast path)
+ * - 실패 시에만 createUser → generateLink 재시도
+ * - updateUser, profiles upsert: fire-and-forget (세션에 불필요)
+ * - verifyOtp만 await (세션 생성 필수)
  */
 export async function POST(request: NextRequest) {
+    const t0 = Date.now()
     try {
         const { payload } = await request.json()
 
@@ -78,39 +81,45 @@ export async function POST(request: NextRequest) {
         const email = `nid_${nid}@inputnavi.internal`
         const displayName = name || `학생_${nid}`
 
-        // ── C-1: 입시내비 API 검증 — fire-and-forget (응답을 기다리지 않음) ──
+        console.log(`[auth] ${nid} 시작 +${Date.now() - t0}ms`)
+
+        // ── 입시내비 API: fire-and-forget ──
         const verifyPayload = xorEncryptToBase64(decrypted, secretKey)
         fetch('https://m.ipsinavi.com/ipsivoca_Api.asp', {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: `payload=${encodeURIComponent(verifyPayload)}`,
         }).then(async res => {
-            if (!res.ok) throw new Error(`API responded ${res.status}`)
             const data = await res.json()
             if (data.status !== 'active') {
-                console.warn(`입시내비 회원 상태 비정상: nid=${nid}, status=${data.status}`)
-                // TODO: 비활성 회원 세션 무효화 처리 가능
+                console.warn(`[auth] 입시내비 비활성: nid=${nid}, status=${data.status}`)
             }
-        }).catch(err => {
-            console.error('입시내비 API 백그라운드 검증 실패:', err)
-        })
+        }).catch(() => {})
 
-        // ── C-3: 기존 유저 확인 → 없으면 생성 ──
-        // createUser는 이미 존재하면 에러 반환하므로, 먼저 시도하고 에러 무시
-        await adminClient.auth.admin.createUser({
-            email,
-            email_confirm: true,
-            user_metadata: { nid, sname: displayName, source: 'inputnavi' },
-        }) // 이미 존재해도 OK — generateLink가 기존 유저를 찾아줌
-
-        // ── C-2: generateLink → 나머지 모두 단일 병렬로 처리 ──
-        const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
+        // ── generateLink 먼저 시도 (재방문 유저 fast path) ──
+        let linkData = (await adminClient.auth.admin.generateLink({
             type: 'magiclink',
             email,
-        })
+        })).data
 
-        if (linkError || !linkData?.properties?.hashed_token) {
-            console.error('generateLink error:', linkError?.message)
+        console.log(`[auth] ${nid} generateLink 1차 +${Date.now() - t0}ms`)
+
+        // 유저가 없으면 생성 후 재시도
+        if (!linkData?.properties?.hashed_token) {
+            await adminClient.auth.admin.createUser({
+                email,
+                email_confirm: true,
+                user_metadata: { nid, sname: displayName, source: 'inputnavi' },
+            })
+            const retry = await adminClient.auth.admin.generateLink({
+                type: 'magiclink',
+                email,
+            })
+            linkData = retry.data
+            console.log(`[auth] ${nid} createUser+retry +${Date.now() - t0}ms`)
+        }
+
+        if (!linkData?.properties?.hashed_token) {
             return NextResponse.json({ ok: false, error: '세션 생성에 실패했습니다.' })
         }
 
@@ -133,26 +142,30 @@ export async function POST(request: NextRequest) {
             }
         )
 
-        // 프로필 업데이트 + 메타데이터 업데이트 + OTP 검증 — 단일 병렬
-        const [,, otpResult] = await Promise.all([
-            adminClient.auth.admin.updateUserById(userId, {
-                user_metadata: { nid, sname: displayName, source: 'inputnavi' },
-            }),
-            adminClient.from('profiles').upsert(
-                { id: userId, name: displayName },
-                { onConflict: 'id' }
-            ),
-            serverClient.auth.verifyOtp({
-                token_hash: linkData.properties.hashed_token,
-                type: 'email',
-            }),
-        ])
+        // ── verifyOtp만 await (세션 생성 필수) ──
+        const otpResult = await serverClient.auth.verifyOtp({
+            token_hash: linkData.properties.hashed_token,
+            type: 'email',
+        })
+
+        console.log(`[auth] ${nid} verifyOtp +${Date.now() - t0}ms`)
 
         if (otpResult.error) {
             console.error('verifyOtp error:', otpResult.error.message)
             return NextResponse.json({ ok: false, error: '세션 설정에 실패했습니다.' })
         }
 
+        // ── updateUser, profiles upsert: fire-and-forget (세션에 불필요) ──
+        adminClient.auth.admin.updateUserById(userId, {
+            user_metadata: { nid, sname: displayName, source: 'inputnavi' },
+        }).catch(() => {})
+
+        adminClient.from('profiles').upsert(
+            { id: userId, name: displayName },
+            { onConflict: 'id' }
+        ).catch(() => {})
+
+        console.log(`[auth] ${nid} 완료 +${Date.now() - t0}ms`)
         return NextResponse.json({ ok: true, redirect: '/study' })
 
     } catch (err) {
