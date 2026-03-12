@@ -1,6 +1,15 @@
+import { createClient } from '@supabase/supabase-js'
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 
 const FIVE_MINUTES = 5 * 60
+
+const adminClient = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+)
 
 /** XOR 복호화 */
 function xorDecrypt(encrypted: Buffer, key: string): string {
@@ -12,23 +21,38 @@ function xorDecrypt(encrypted: Buffer, key: string): string {
     return result.toString('utf8')
 }
 
-/** GET fallback */
-export async function GET(request: NextRequest) {
-    const payload = request.nextUrl.searchParams.get('payload')
-    return handleVerify(payload, request.nextUrl.origin)
+/** XOR 암호화 → Base64 */
+function xorEncryptToBase64(plaintext: string, key: string): string {
+    const textBytes = Buffer.from(plaintext, 'utf8')
+    const keyBytes = Buffer.from(key, 'utf8')
+    const result = Buffer.alloc(textBytes.length)
+    for (let i = 0; i < textBytes.length; i++) {
+        result[i] = textBytes[i] ^ keyBytes[i % keyBytes.length]
+    }
+    return result.toString('base64')
 }
 
 /**
  * POST /api/auth/verify
  *
- * target="_blank" 제거 후 WebView 내부에서 동작
- * redirect 없이 HTML 직접 반환 → WebView 이탈 방지
+ * 1단계 완결: 복호화 → 검증 → 세션 생성 → 302 redirect to /study
+ * HTML 반환 없음 (iPhone WebView에서 다운로드로 처리되는 문제 방지)
+ *
+ * 최적화:
+ * - 입시내비 API: fire-and-forget
+ * - generateLink 먼저 시도 (재방문 유저 fast path)
+ * - updateUser, profiles upsert: fire-and-forget
+ * - verifyOtp만 await
  */
 export async function POST(request: NextRequest) {
-    const contentType = request.headers.get('content-type') || ''
-    let payload: string | null = null
+    const IPSI_NAVI_URL = process.env.IPSI_NAVI_URL || 'https://ipsinavi.com'
+    const t0 = Date.now()
 
     try {
+        // ── payload 추출 ──
+        const contentType = request.headers.get('content-type') || ''
+        let payload: string | null = null
+
         if (contentType.includes('application/x-www-form-urlencoded')) {
             const formData = await request.formData()
             payload = formData.get('payload') as string
@@ -36,18 +60,7 @@ export async function POST(request: NextRequest) {
             const body = await request.json()
             payload = body.payload
         }
-    } catch {
-        payload = null
-    }
 
-    return handleVerify(payload, request.nextUrl.origin)
-}
-
-/** 공통 검증 로직 */
-function handleVerify(payload: string | null, origin: string) {
-    const IPSI_NAVI_URL = process.env.IPSI_NAVI_URL || 'https://ipsinavi.com'
-
-    try {
         if (!payload) {
             return errorPage('비정상 접근입니다.', IPSI_NAVI_URL)
         }
@@ -57,6 +70,7 @@ function handleVerify(payload: string | null, origin: string) {
             return errorPage('비정상 접근입니다.', IPSI_NAVI_URL)
         }
 
+        // ── 복호화 + 검증 ──
         const encrypted = Buffer.from(payload, 'base64')
         let decrypted: string
         try {
@@ -83,8 +97,100 @@ function handleVerify(payload: string | null, origin: string) {
             return errorPage('인증 시간이 만료되었습니다.', IPSI_NAVI_URL)
         }
 
-        // 검증 통과 → 로딩 화면 + 세션 처리
-        return loadingPage(payload, name, IPSI_NAVI_URL)
+        const email = `nid_${nid}@inputnavi.internal`
+        const displayName = name || `학생_${nid}`
+
+        console.log(`[auth] ${nid} 시작 +${Date.now() - t0}ms`)
+
+        // ── 입시내비 API: fire-and-forget ──
+        const verifyPayload = xorEncryptToBase64(decrypted, secretKey)
+        fetch('https://m.ipsinavi.com/ipsivoca_Api.asp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `payload=${encodeURIComponent(verifyPayload)}`,
+        }).then(async res => {
+            const data = await res.json()
+            if (data.status !== 'active') {
+                console.warn(`[auth] 입시내비 비활성: nid=${nid}, status=${data.status}`)
+            }
+        }).catch(() => {})
+
+        // ── generateLink 먼저 시도 (재방문 유저 fast path) ──
+        let linkData = (await adminClient.auth.admin.generateLink({
+            type: 'magiclink',
+            email,
+        })).data
+
+        console.log(`[auth] ${nid} generateLink 1차 +${Date.now() - t0}ms`)
+
+        // 유저가 없으면 생성 후 재시도
+        if (!linkData?.properties?.hashed_token) {
+            await adminClient.auth.admin.createUser({
+                email,
+                email_confirm: true,
+                user_metadata: { nid, sname: displayName, source: 'inputnavi' },
+            })
+            const retry = await adminClient.auth.admin.generateLink({
+                type: 'magiclink',
+                email,
+            })
+            linkData = retry.data
+            console.log(`[auth] ${nid} createUser+retry +${Date.now() - t0}ms`)
+        }
+
+        if (!linkData?.properties?.hashed_token) {
+            return errorPage('세션 생성에 실패했습니다.', IPSI_NAVI_URL)
+        }
+
+        const userId = linkData.user.id
+        const cookieStore = await cookies()
+        const serverClient = createServerClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+            {
+                cookies: {
+                    getAll() { return cookieStore.getAll() },
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    setAll(cookiesToSet: any[]) {
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        cookiesToSet.forEach(({ name, value, options }: any) =>
+                            cookieStore.set(name, value, options)
+                        )
+                    },
+                },
+            }
+        )
+
+        // ── verifyOtp만 await (세션 생성 필수) ──
+        const otpResult = await serverClient.auth.verifyOtp({
+            token_hash: linkData.properties.hashed_token,
+            type: 'email',
+        })
+
+        console.log(`[auth] ${nid} verifyOtp +${Date.now() - t0}ms`)
+
+        if (otpResult.error) {
+            console.error('verifyOtp error:', otpResult.error.message)
+            return errorPage('세션 설정에 실패했습니다.', IPSI_NAVI_URL)
+        }
+
+        // ── fire-and-forget: updateUser, profiles upsert ──
+        adminClient.auth.admin.updateUserById(userId, {
+            user_metadata: { nid, sname: displayName, source: 'inputnavi' },
+        }).catch(() => {})
+
+        Promise.resolve(
+            adminClient.from('profiles').upsert(
+                { id: userId, name: displayName },
+                { onConflict: 'id' }
+            )
+        ).catch(() => {})
+
+        console.log(`[auth] ${nid} 완료 +${Date.now() - t0}ms`)
+
+        // ── 302 redirect to /study (HTML 반환 X → iPhone 호환) ──
+        const origin = `${request.nextUrl.protocol}//${request.nextUrl.host}`
+        return NextResponse.redirect(`${origin}/study`)
 
     } catch (err) {
         console.error('Verify error:', err)
@@ -92,146 +198,7 @@ function handleVerify(payload: string | null, origin: string) {
     }
 }
 
-/** 환영 로딩 화면 — JS가 /api/auth/verify/session 호출 후 /study로 이동 */
-function loadingPage(payload: string, userName: string, ipsiNaviUrl: string) {
-    const html = `<!DOCTYPE html>
-<html lang="ko">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>입시보카</title>
-<link rel="prefetch" href="/study" />
-<style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body {
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    color: #fff;
-    overflow: hidden;
-}
-.container {
-    text-align: center;
-    z-index: 1;
-    animation: fadeIn 0.3s ease-out;
-}
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(12px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-.logo {
-    font-size: 2.2rem;
-    font-weight: 800;
-    background: linear-gradient(135deg, #6C63FF, #a78bfa);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    margin-bottom: 1.5rem;
-}
-.greeting {
-    font-size: 1.1rem;
-    color: #c4b5fd;
-    margin-bottom: 2rem;
-}
-.spinner-wrap {
-    display: flex;
-    justify-content: center;
-    margin-bottom: 1.5rem;
-}
-.spinner {
-    width: 48px;
-    height: 48px;
-    border: 4px solid rgba(108, 99, 255, 0.2);
-    border-top-color: #6C63FF;
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-}
-@keyframes spin {
-    to { transform: rotate(360deg); }
-}
-.status {
-    font-size: 0.95rem;
-    color: #94a3b8;
-}
-.dots::after {
-    content: '';
-    animation: dots 1.5s steps(4, end) infinite;
-}
-@keyframes dots {
-    0%   { content: ''; }
-    25%  { content: '.'; }
-    50%  { content: '..'; }
-    75%  { content: '...'; }
-}
-.bg-orb {
-    position: fixed;
-    border-radius: 50%;
-    filter: blur(80px);
-    opacity: 0.3;
-    animation: float 6s ease-in-out infinite;
-}
-.orb1 {
-    width: 300px; height: 300px;
-    background: #6C63FF;
-    top: -100px; left: -100px;
-}
-.orb2 {
-    width: 250px; height: 250px;
-    background: #a78bfa;
-    bottom: -80px; right: -80px;
-    animation-delay: 3s;
-}
-@keyframes float {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(20px); }
-}
-</style>
-</head>
-<body>
-<div class="bg-orb orb1"></div>
-<div class="bg-orb orb2"></div>
-<div class="container">
-    <div class="logo">입시보카</div>
-    <div class="greeting">${userName}님, 환영합니다!</div>
-    <div class="spinner-wrap"><div class="spinner"></div></div>
-    <div class="status" id="status">로그인 처리 중<span class="dots"></span></div>
-</div>
-<script>
-(async function() {
-    var status = document.getElementById('status');
-    try {
-        var res = await fetch('/api/auth/verify/session', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ payload: '${payload}' }),
-            credentials: 'same-origin',
-        });
-        var data = await res.json();
-        if (data.ok) {
-            status.textContent = '로그인 완료!';
-            window.location.href = '/study';
-        } else {
-            alert(data.error || '로그인에 실패했습니다.');
-            window.location.href = '${ipsiNaviUrl}';
-        }
-    } catch (e) {
-        alert('로그인 처리 중 오류가 발생했습니다.');
-        window.location.href = '${ipsiNaviUrl}';
-    }
-})();
-</script>
-</body>
-</html>`
-
-    return new NextResponse(html, {
-        status: 200,
-        headers: { 'Content-Type': 'text/html; charset=utf-8' },
-    })
-}
-
-/** 에러 알림 + 입시내비로 이동 */
+/** 에러: 경고창 + 입시내비로 이동 */
 function errorPage(message: string, redirectUrl: string) {
     const html = `<!DOCTYPE html>
 <html lang="ko">
