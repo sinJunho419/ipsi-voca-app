@@ -213,7 +213,7 @@ body {
 
     return new NextResponse(html, {
         status: 200,
-        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+        headers: { 'Content-Type': 'text/html; charset=utf-8', 'Content-Disposition': 'inline' },
     })
 }
 
@@ -232,6 +232,6 @@ function errorPage(message: string, redirectUrl: string) {
 
     return new NextResponse(html, {
         status: 200,
-        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+        headers: { 'Content-Type': 'text/html; charset=utf-8', 'Content-Disposition': 'inline' },
     })
 }
