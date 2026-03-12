@@ -204,8 +204,8 @@ function successPage(userName: string) {
 <head><meta charset="utf-8"><title>입시보카</title></head>
 <body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0f0c29,#302b63,#24243e);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#fff">
 <div style="text-align:center">
-  <div style="font-size:2.2rem;font-weight:800;background:linear-gradient(135deg,#6C63FF,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:1rem">입시보카</div>
-  <div style="font-size:1.1rem;color:#c4b5fd">${userName}님, 환영합니다!</div>
+  <div style="font-size:8rem;font-weight:800;background:linear-gradient(135deg,#6C63FF,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:1.5rem">입시보카</div>
+  <div style="font-size:4rem;color:#c4b5fd">${userName}님, 환영합니다!</div>
 </div>
 <script>
   setTimeout(function(){ window.location.href = "/study"; }, 1500);
