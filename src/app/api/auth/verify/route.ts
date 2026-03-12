@@ -189,14 +189,9 @@ export async function POST(request: NextRequest) {
         console.log(`[auth] ${nid} 완료 +${Date.now() - t0}ms`)
 
         // ── 302 redirect to /study (HTML 반환 X → iPhone 호환) ──
-        const origin = `${request.nextUrl.protocol}//${request.nextUrl.host}`
-        const response = NextResponse.redirect(`${origin}/study`, 302)
-        response.cookies.set('welcome_name', displayName, {
-            maxAge: 30,
-            path: '/',
-            httpOnly: false,
-        })
-        return response
+        const redirectUrl = new URL('/study', request.url)
+        redirectUrl.searchParams.set('welcome', displayName)
+        return NextResponse.redirect(redirectUrl, 302)
 
     } catch (err) {
         console.error('Verify error:', err)
