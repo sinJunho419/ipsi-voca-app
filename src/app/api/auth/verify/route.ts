@@ -1,33 +1,6 @@
-import { createClient } from '@supabase/supabase-js'
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 
 const FIVE_MINUTES = 5 * 60
-
-// 모듈 레벨에서 1회만 생성 (매 요청마다 재생성 방지)
-const adminClient = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-)
-
-/**
- * 입시내비 → 입시보카 인증
- *
- * POST /api/auth/verify
- * Body: payload=Base64(XOR(UTF8(nid|name|timestamp), UTF8(secretKey)))
- *
- * 암호화 방식: UTF-8 바이트 단위 XOR + Base64 (Classic ASP 순수 VBScript 호환)
- *
- * 흐름:
- * 1. Base64 디코딩 → XOR 복호화
- * 2. 타임스탬프 유효성 검증 (5분)
- * 3. 입시내비 API 호출 → 회원 상태 확인
- * 4. Supabase 유저 생성/조회 + 세션 설정
- * 5. 정상 → /study 리다이렉트
- * 6. 비정상 → 경고 + 입시내비로 리다이렉트
- */
 
 /** XOR 복호화 */
 function xorDecrypt(encrypted: Buffer, key: string): string {
@@ -39,22 +12,17 @@ function xorDecrypt(encrypted: Buffer, key: string): string {
     return result.toString('utf8')
 }
 
-/** XOR 암호화 → Base64 (입시내비 API 호출용) */
-function xorEncryptToBase64(plaintext: string, key: string): string {
-    const textBytes = Buffer.from(plaintext, 'utf8')
-    const keyBytes = Buffer.from(key, 'utf8')
-    const result = Buffer.alloc(textBytes.length)
-    for (let i = 0; i < textBytes.length; i++) {
-        result[i] = textBytes[i] ^ keyBytes[i % keyBytes.length]
-    }
-    return result.toString('base64')
-}
-
+/**
+ * POST /api/auth/verify
+ *
+ * 1단계: 복호화 + 기본 검증만 수행 → 즉시 로딩 화면 리턴
+ * 실제 인증(입시내비 API + Supabase 세션)은 로딩 화면의 JS가
+ * /api/auth/verify/session 을 호출하여 처리
+ */
 export async function POST(request: NextRequest) {
     const IPSI_NAVI_URL = process.env.IPSI_NAVI_URL || 'https://ipsinavi.com'
 
     try {
-        // ── 1. payload 추출 ──────────────────────────────────────────
         const contentType = request.headers.get('content-type') || ''
         let payload: string | null = null
 
@@ -72,10 +40,10 @@ export async function POST(request: NextRequest) {
 
         const secretKey = process.env.VOCA_SECRET_KEY?.trim()
         if (!secretKey) {
-            console.error('VOCA_SECRET_KEY 미설정')
             return errorPage('비정상 접근입니다.', IPSI_NAVI_URL)
         }
 
+        // 복호화 + 기본 검증 (즉시 완료)
         const encrypted = Buffer.from(payload, 'base64')
         let decrypted: string
         try {
@@ -85,7 +53,6 @@ export async function POST(request: NextRequest) {
         }
 
         const parts = decrypted.split('|')
-
         if (parts.length < 3) {
             return errorPage('비정상 접근입니다.', IPSI_NAVI_URL)
         }
@@ -98,117 +65,164 @@ export async function POST(request: NextRequest) {
             return errorPage('비정상 접근입니다.', IPSI_NAVI_URL)
         }
 
-        // ── 4. 타임스탬프 유효성 (5분) ───────────────────────────────
         const now = Math.floor(Date.now() / 1000)
         if (Math.abs(now - ts) > FIVE_MINUTES) {
             return errorPage('인증 시간이 만료되었습니다.', IPSI_NAVI_URL)
         }
 
-        // ── 5. 입시내비 API + Supabase 유저 준비를 병렬 실행 ─────────
-        const verifyApiUrl = 'https://m.ipsinavi.com/ipsivoca_Api.asp'
-        const verifyPayload = xorEncryptToBase64(decrypted, secretKey)
-        const email = `nid_${nid}@inputnavi.internal`
-        const displayName = name || `학생_${nid}`
-
-        // 입시내비 API 호출 + 유저 생성을 동시에 시작 (낙관적 처리)
-        const [apiResult, createResult] = await Promise.all([
-            // 입시내비 회원 상태 확인
-            fetch(verifyApiUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: `payload=${encodeURIComponent(verifyPayload)}`,
-            }).then(async res => {
-                if (!res.ok) throw new Error(`입시내비 API responded ${res.status}`)
-                return res.json()
-            }).catch(err => {
-                console.error('입시내비 API call failed:', err)
-                return { status: '__error__' }
-            }),
-            // Supabase 유저 생성 (이미 있으면 무시)
-            adminClient.auth.admin.createUser({
-                email,
-                email_confirm: true,
-                user_metadata: { nid, sname: displayName, source: 'inputnavi' },
-            }),
-        ])
-
-        // ── 6. 상태 판별 ─────────────────────────────────────────────
-        const memberStatus = apiResult.status
-        if (memberStatus !== 'active') {
-            const errorMessages: Record<string, string> = {
-                '__error__': '회원 정보를 확인할 수 없습니다.',
-                'inactive': '미사용 상태의 회원입니다.',
-                'fail01': '인증 처리 중 오류가 발생했습니다.',
-                'fail02': '인증 처리 중 오류가 발생했습니다.',
-                'fail03': '인증 처리 중 오류가 발생했습니다.',
-                'fail04': '인증 처리 중 오류가 발생했습니다.',
-                'fail05': '인증 처리 중 오류가 발생했습니다.',
-                'Time Over': '인증 시간이 만료되었습니다.',
-                'Empty': '등록되지 않은 회원입니다.',
-            }
-            const statusMsg = errorMessages[memberStatus] || '비정상 접근입니다.'
-            console.error('입시내비 회원 상태 확인 실패:', memberStatus)
-            return errorPage(statusMsg, IPSI_NAVI_URL)
-        }
-
-        // ── 7. Magic Link 생성 + 세션 설정 ───────────────────────────
-        const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
-            type: 'magiclink',
-            email,
-        })
-
-        if (linkError || !linkData?.properties?.hashed_token) {
-            console.error('generateLink error:', linkError?.message)
-            return errorPage('세션 생성에 실패했습니다.', IPSI_NAVI_URL)
-        }
-
-        const userId = linkData.user.id
-        const cookieStore = await cookies()
-        const serverClient = createServerClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-            {
-                cookies: {
-                    getAll() { return cookieStore.getAll() },
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    setAll(cookiesToSet: any[]) {
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        cookiesToSet.forEach(({ name, value, options }: any) =>
-                            cookieStore.set(name, value, options)
-                        )
-                    },
-                },
-            }
-        )
-
-        // 프로필 업데이트 2개 + OTP 검증을 병렬 실행
-        const [,, otpResult] = await Promise.all([
-            adminClient.auth.admin.updateUserById(userId, {
-                user_metadata: { nid, sname: displayName, source: 'inputnavi' },
-            }),
-            adminClient.from('profiles').upsert(
-                { id: userId, name: displayName },
-                { onConflict: 'id' }
-            ),
-            serverClient.auth.verifyOtp({
-                token_hash: linkData.properties.hashed_token,
-                type: 'email',
-            }),
-        ])
-
-        if (otpResult.error) {
-            console.error('verifyOtp error:', otpResult.error.message)
-            return errorPage('세션 설정에 실패했습니다.', IPSI_NAVI_URL)
-        }
-
-        // ── 9. /study 리다이렉트 (Supabase 세션 쿠키 이미 설정됨) ────
-        const origin = `${request.nextUrl.protocol}//${request.nextUrl.host}`
-        return NextResponse.redirect(`${origin}/study`)
+        // 검증 통과 → 즉시 로딩 화면 리턴 (payload를 그대로 전달)
+        return loadingPage(payload, name, IPSI_NAVI_URL)
 
     } catch (err) {
         console.error('Verify error:', err)
-        return errorPage('비정상 접근입니다.', IPSI_NAVI_URL)
+        return errorPage('비정상 접근입니다.', process.env.IPSI_NAVI_URL || 'https://ipsinavi.com')
     }
+}
+
+/** 로딩 화면 HTML — JS가 /api/auth/verify/session 호출 */
+function loadingPage(payload: string, userName: string, ipsiNaviUrl: string) {
+    const html = `<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>입시보카 - 로그인 중</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    color: #fff;
+    overflow: hidden;
+}
+.container {
+    text-align: center;
+    z-index: 1;
+}
+.logo {
+    font-size: 2.2rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, #6C63FF, #a78bfa);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 1.5rem;
+}
+.greeting {
+    font-size: 1.1rem;
+    color: #c4b5fd;
+    margin-bottom: 2rem;
+}
+.spinner-wrap {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 1.5rem;
+}
+.spinner {
+    width: 48px;
+    height: 48px;
+    border: 4px solid rgba(108, 99, 255, 0.2);
+    border-top-color: #6C63FF;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+.status {
+    font-size: 0.95rem;
+    color: #94a3b8;
+    transition: opacity 0.3s;
+}
+.dots::after {
+    content: '';
+    animation: dots 1.5s steps(4, end) infinite;
+}
+@keyframes dots {
+    0%   { content: ''; }
+    25%  { content: '.'; }
+    50%  { content: '..'; }
+    75%  { content: '...'; }
+}
+/* 배경 장식 */
+.bg-orb {
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.3;
+    animation: float 6s ease-in-out infinite;
+}
+.orb1 {
+    width: 300px; height: 300px;
+    background: #6C63FF;
+    top: -100px; left: -100px;
+}
+.orb2 {
+    width: 250px; height: 250px;
+    background: #a78bfa;
+    bottom: -80px; right: -80px;
+    animation-delay: 3s;
+}
+@keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(20px); }
+}
+.error-msg {
+    color: #f87171;
+    font-size: 0.9rem;
+    margin-top: 1rem;
+    display: none;
+}
+</style>
+</head>
+<body>
+<div class="bg-orb orb1"></div>
+<div class="bg-orb orb2"></div>
+<div class="container">
+    <div class="logo">입시보카</div>
+    <div class="greeting">${userName}님, 환영합니다!</div>
+    <div class="spinner-wrap"><div class="spinner"></div></div>
+    <div class="status" id="status">로그인 처리 중<span class="dots"></span></div>
+    <div class="error-msg" id="error"></div>
+</div>
+<script>
+(async function() {
+    const status = document.getElementById('status');
+    const errorEl = document.getElementById('error');
+
+    try {
+        const res = await fetch('/api/auth/verify/session', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ payload: '${payload}' }),
+            credentials: 'same-origin',
+        });
+
+        const data = await res.json();
+
+        if (data.ok) {
+            status.textContent = '로그인 완료! 이동 중...';
+            window.location.href = data.redirect || '/study';
+        } else {
+            alert(data.error || '로그인에 실패했습니다.');
+            window.location.href = '${ipsiNaviUrl}';
+        }
+    } catch (e) {
+        alert('로그인 처리 중 오류가 발생했습니다.');
+        window.location.href = '${ipsiNaviUrl}';
+    }
+})();
+</script>
+</body>
+</html>`
+
+    return new NextResponse(html, {
+        status: 200,
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+    })
 }
 
 /** 경고창 + 입시내비로 리다이렉트하는 HTML 응답 */
