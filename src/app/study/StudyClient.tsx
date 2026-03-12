@@ -163,9 +163,20 @@ export default function StudyClient({ initialWords, initialMaxSet }: Props) {
                             로딩 중…
                         </div>
                     ) : words.length === 0 ? (
-                        <div className={`${styles.glass} ${styles.empty} ${styles.animFadeUp}`}>
-                            단어가 없습니다.<br />
-                            <small style={{ fontSize: '0.8rem', opacity: 0.6 }}>Supabase SQL Editor에서 seed.sql을 실행해주세요.</small>
+                        <div className={styles.animFadeUp} style={{ animationDelay: '0.05s' }}>
+                            {/* 빈 플래시카드 */}
+                            <div className={`${styles.cardWrap} ${styles.animPopIn}`} style={{ margin: '0.5rem 0' }}>
+                                <div className={styles.card}>
+                                    <div className={`${styles.cardFace} ${styles.cardFront}`}>
+                                        <span className={styles.wordText} style={{ opacity: 0.25 }}>?</span>
+                                    </div>
+                                </div>
+                            </div>
+                            {/* 이전 / 다음 (비활성) */}
+                            <div className={`${styles.glass} ${styles.nav}`}>
+                                <button className={styles.navBtn} disabled>← 이전</button>
+                                <button className={styles.navBtn} disabled>다음 →</button>
+                            </div>
                         </div>
                     ) : (
                         <div className={styles.animFadeUp} style={{ animationDelay: '0.05s' }}>
