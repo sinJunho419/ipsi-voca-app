@@ -7,7 +7,7 @@ import type { Word, Level } from '@/types/vocabulary'
 import { getSetLabel } from '@/lib/setAliases'
 import { TIER_LEVELS } from '@/lib/tierSystem'
 import styles from './study.module.css'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import QuizClient from './QuizClient'
 import MasterChallengeClient from './MasterChallengeClient'
 import WrongWordsClient from './WrongWordsClient'
@@ -35,6 +35,19 @@ const spring: Transition = { type: 'spring', stiffness: 420, damping: 30 }
 export default function StudyClient({ initialWords, initialMaxSet }: Props) {
     const supabase = createClient()
     const router = useRouter()
+    const searchParams = useSearchParams()
+
+    // 환영 오버레이
+    const welcomeName = searchParams.get('welcome')
+    const [showWelcome, setShowWelcome] = useState(!!welcomeName)
+
+    useEffect(() => {
+        if (!welcomeName) return
+        // URL에서 welcome 파라미터 제거
+        window.history.replaceState({}, '', '/study')
+        const timer = setTimeout(() => setShowWelcome(false), 1800)
+        return () => clearTimeout(timer)
+    }, [welcomeName])
 
     const [tab, setTab] = useState<Tab>('study')
     const [level, setLevel] = useState<Level | null>(null)
@@ -208,6 +221,29 @@ export default function StudyClient({ initialWords, initialMaxSet }: Props) {
 
     return (
         <div className={styles.page}>
+            {/* 환영 오버레이 */}
+            <AnimatePresence>
+                {showWelcome && (
+                    <motion.div
+                        className={styles.welcomeOverlay}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.3 }}
+                    >
+                        <motion.div
+                            className={styles.welcomeContent}
+                            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: -10, scale: 0.98 }}
+                            transition={spring}
+                        >
+                            <div className={styles.welcomeLogo}>입시보카</div>
+                            <div className={styles.welcomeGreeting}>{welcomeName}님, 환영합니다!</div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
             <BattleFeed />
             {/* 벤토 그리드 */}
             <div className={styles.bento}>
