@@ -1360,3 +1360,45 @@
   height: 28px;
   background: rgba(99, 102, 241, 0.15);
 }
+
+/* ── CSS 애니메이션 (framer-motion 제거 대체) ── */
+
+/* 페이드 업 */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animFadeUp {
+  animation: fadeUp 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* 팝 인 */
+@keyframes popIn {
+  from { opacity: 0; transform: scale(0.92); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.animPopIn {
+  animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* 슬라이드 */
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(30px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.animSlideIn {
+  animation: slideIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* 버튼 탭 효과 */
+.tabBtn:active:not(:disabled),
+.navBtn:active:not(:disabled),
+.battleBtn:active,
+.retryBtn:active,
+.nextBtn:active,
+.speakBtn:active {
+  transform: scale(0.93);
+}

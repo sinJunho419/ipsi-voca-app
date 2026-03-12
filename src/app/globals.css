@@ -8,7 +8,7 @@
 }
 
 :root {
-  --font: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font: var(--font-pretendard), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 
   /* 파스텔 포인트 컬러 */
   --blue: #6366f1;

@@ -2,6 +2,9 @@ import { createClient } from '@/lib/supabase/server'
 import type { Word } from '@/types/vocabulary'
 import StudyClient from './StudyClient'
 
+/** ISR: 60초 캐시 — 매 요청마다 Supabase 호출하지 않음 */
+export const revalidate = 60
+
 /**
  * Server Component: 초기 데이터(elem_low, Set 1)를 서버에서 미리 fetch해서
  * 페이지 첫 로드 시 클라이언트 fetch 없이 즉시 표시합니다.
