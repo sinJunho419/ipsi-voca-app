@@ -104,33 +104,39 @@ export async function POST(request: NextRequest) {
             return errorPage('인증 시간이 만료되었습니다.', IPSI_NAVI_URL)
         }
 
-        // ── 5. 입시내비 API 호출 → 회원 상태 확인 ────────────────────
+        // ── 5. 입시내비 API + Supabase 유저 준비를 병렬 실행 ─────────
         const verifyApiUrl = 'https://m.ipsinavi.com/ipsivoca_Api.asp'
+        const verifyPayload = xorEncryptToBase64(decrypted, secretKey)
+        const email = `nid_${nid}@inputnavi.internal`
+        const displayName = name || `학생_${nid}`
 
-        let memberStatus: string
-        try {
-            const verifyPayload = xorEncryptToBase64(decrypted, secretKey)
-
-            const res = await fetch(verifyApiUrl, {
+        // 입시내비 API 호출 + 유저 생성을 동시에 시작 (낙관적 처리)
+        const [apiResult, createResult] = await Promise.all([
+            // 입시내비 회원 상태 확인
+            fetch(verifyApiUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: `payload=${encodeURIComponent(verifyPayload)}`,
-            })
-
-            if (!res.ok) {
-                throw new Error(`입시내비 API responded ${res.status}`)
-            }
-
-            const data = await res.json()
-            memberStatus = data.status
-        } catch (err) {
-            console.error('입시내비 API call failed:', err)
-            return errorPage('회원 정보를 확인할 수 없습니다.', IPSI_NAVI_URL)
-        }
+            }).then(async res => {
+                if (!res.ok) throw new Error(`입시내비 API responded ${res.status}`)
+                return res.json()
+            }).catch(err => {
+                console.error('입시내비 API call failed:', err)
+                return { status: '__error__' }
+            }),
+            // Supabase 유저 생성 (이미 있으면 무시)
+            adminClient.auth.admin.createUser({
+                email,
+                email_confirm: true,
+                user_metadata: { nid, sname: displayName, source: 'inputnavi' },
+            }),
+        ])
 
         // ── 6. 상태 판별 ─────────────────────────────────────────────
+        const memberStatus = apiResult.status
         if (memberStatus !== 'active') {
             const errorMessages: Record<string, string> = {
+                '__error__': '회원 정보를 확인할 수 없습니다.',
                 'inactive': '미사용 상태의 회원입니다.',
                 'fail01': '인증 처리 중 오류가 발생했습니다.',
                 'fail02': '인증 처리 중 오류가 발생했습니다.',
@@ -145,22 +151,7 @@ export async function POST(request: NextRequest) {
             return errorPage(statusMsg, IPSI_NAVI_URL)
         }
 
-        // ── 7. Supabase 유저 생성 + Magic Link 생성 ────────────────────
-        const email = `nid_${nid}@inputnavi.internal`
-        const displayName = name || `학생_${nid}`
-
-        // 유저 생성 시도 (이미 있으면 무시)
-        await adminClient.auth.admin.createUser({
-            email,
-            email_confirm: true,
-            user_metadata: {
-                nid,
-                sname: displayName,
-                source: 'inputnavi',
-            },
-        })
-
-        // Magic Link 생성 (유저 정보도 함께 리턴됨)
+        // ── 7. Magic Link 생성 + 세션 설정 ───────────────────────────
         const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
             type: 'magiclink',
             email,
@@ -171,9 +162,7 @@ export async function POST(request: NextRequest) {
             return errorPage('세션 생성에 실패했습니다.', IPSI_NAVI_URL)
         }
 
-        // ── 8. 프로필 업데이트 + 세션 설정 (병렬 실행) ──────────────
         const userId = linkData.user.id
-
         const cookieStore = await cookies()
         const serverClient = createServerClient(
             process.env.NEXT_PUBLIC_SUPABASE_URL!,
