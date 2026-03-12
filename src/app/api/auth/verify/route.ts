@@ -15,11 +15,10 @@ function xorDecrypt(encrypted: Buffer, key: string): string {
 /**
  * POST /api/auth/verify
  *
- * 복호화 + 검증 → 303 redirect to /auth/loading
- * WebView 호환성을 위해 HTML 직접 반환 대신 PRG 패턴 사용
+ * 복호화 + 검증 → /auth/loading으로 이동
+ * iOS/Android WebView 모두 호환되도록 HTML meta refresh + JS redirect 사용
  */
 export async function POST(request: NextRequest) {
-    const baseUrl = request.nextUrl.origin
     const IPSI_NAVI_URL = process.env.IPSI_NAVI_URL || 'https://ipsinavi.com'
 
     try {
@@ -35,12 +34,12 @@ export async function POST(request: NextRequest) {
         }
 
         if (!payload) {
-            return errorRedirect(baseUrl, '비정상 접근입니다.', IPSI_NAVI_URL)
+            return redirectPage(`/auth/loading?error=${encodeURIComponent('비정상 접근입니다.')}&redirect=${encodeURIComponent(IPSI_NAVI_URL)}`)
         }
 
         const secretKey = process.env.VOCA_SECRET_KEY?.trim()
         if (!secretKey) {
-            return errorRedirect(baseUrl, '비정상 접근입니다.', IPSI_NAVI_URL)
+            return redirectPage(`/auth/loading?error=${encodeURIComponent('비정상 접근입니다.')}&redirect=${encodeURIComponent(IPSI_NAVI_URL)}`)
         }
 
         // 복호화 + 기본 검증
@@ -49,12 +48,12 @@ export async function POST(request: NextRequest) {
         try {
             decrypted = xorDecrypt(encrypted, secretKey)
         } catch {
-            return errorRedirect(baseUrl, '비정상 접근입니다.', IPSI_NAVI_URL)
+            return redirectPage(`/auth/loading?error=${encodeURIComponent('비정상 접근입니다.')}&redirect=${encodeURIComponent(IPSI_NAVI_URL)}`)
         }
 
         const parts = decrypted.split('|')
         if (parts.length < 3) {
-            return errorRedirect(baseUrl, '비정상 접근입니다.', IPSI_NAVI_URL)
+            return redirectPage(`/auth/loading?error=${encodeURIComponent('비정상 접근입니다.')}&redirect=${encodeURIComponent(IPSI_NAVI_URL)}`)
         }
 
         const nid = parts[0]
@@ -62,36 +61,33 @@ export async function POST(request: NextRequest) {
         const ts = parseInt(parts[2], 10)
 
         if (!nid || !name || isNaN(ts)) {
-            return errorRedirect(baseUrl, '비정상 접근입니다.', IPSI_NAVI_URL)
+            return redirectPage(`/auth/loading?error=${encodeURIComponent('비정상 접근입니다.')}&redirect=${encodeURIComponent(IPSI_NAVI_URL)}`)
         }
 
         const now = Math.floor(Date.now() / 1000)
         if (Math.abs(now - ts) > FIVE_MINUTES) {
-            return errorRedirect(baseUrl, '인증 시간이 만료되었습니다.', IPSI_NAVI_URL)
+            return redirectPage(`/auth/loading?error=${encodeURIComponent('인증 시간이 만료되었습니다.')}&redirect=${encodeURIComponent(IPSI_NAVI_URL)}`)
         }
 
-        // 검증 통과 → 로딩 페이지로 redirect (PRG 패턴)
+        // 검증 통과 → 로딩 페이지로 이동
         const params = new URLSearchParams({ payload, name })
-        return NextResponse.redirect(
-            `${baseUrl}/auth/loading?${params.toString()}`,
-            303
-        )
+        return redirectPage(`/auth/loading?${params.toString()}`)
 
     } catch (err) {
         console.error('Verify error:', err)
-        return errorRedirect(
-            request.nextUrl.origin,
-            '비정상 접근입니다.',
-            process.env.IPSI_NAVI_URL || 'https://ipsinavi.com'
-        )
+        const ipsi = process.env.IPSI_NAVI_URL || 'https://ipsinavi.com'
+        return redirectPage(`/auth/loading?error=${encodeURIComponent('비정상 접근입니다.')}&redirect=${encodeURIComponent(ipsi)}`)
     }
 }
 
-/** 에러 시 로딩 페이지로 redirect (alert 표시 후 입시내비로 이동) */
-function errorRedirect(baseUrl: string, message: string, redirectUrl: string) {
-    const params = new URLSearchParams({ error: message, redirect: redirectUrl })
-    return NextResponse.redirect(
-        `${baseUrl}/auth/loading?${params.toString()}`,
-        303
-    )
+/** 최소 HTML로 페이지 이동 — iOS/Android WebView 모두 호환 */
+function redirectPage(url: string) {
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=${url}"></head><body><script>location.replace("${url}")</script></body></html>`
+    return new NextResponse(html, {
+        status: 200,
+        headers: {
+            'Content-Type': 'text/html; charset=utf-8',
+            'Content-Disposition': 'inline',
+        },
+    })
 }
