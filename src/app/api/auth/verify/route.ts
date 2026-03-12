@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
         debugLog['9_5분_초과여부'] = Math.abs(now - ts) > FIVE_MINUTES
 
         // ── 입시내비 API 호출 ────────────────────────────────────────
-        const verifyApiUrl = 'https://m.ipsinavi.com/api/ipsivoca_Api.asp'
+        const verifyApiUrl = 'https://m.ipsinavi.com/ipsivoca_Api.asp'
         const verifyPayload = xorEncryptToBase64(decrypted, secretKey)
 
         debugLog['10_재암호화_payload'] = verifyPayload
