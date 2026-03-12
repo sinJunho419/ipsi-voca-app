@@ -213,9 +213,18 @@ function successPage(userName: string) {
 </body>
 </html>`
 
+    return htmlResponse(html)
+}
+
+/** iOS 호환 HTML 응답 헤더 */
+function htmlResponse(html: string) {
     return new NextResponse(html, {
         status: 200,
-        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+        headers: {
+            'Content-Type': 'text/html; charset=utf-8',
+            'Content-Disposition': 'inline',
+            'X-Frame-Options': 'ALLOWALL',
+        },
     })
 }
 
@@ -232,8 +241,5 @@ function errorPage(message: string, redirectUrl: string) {
 </body>
 </html>`
 
-    return new NextResponse(html, {
-        status: 200,
-        headers: { 'Content-Type': 'text/html; charset=utf-8' },
-    })
+    return htmlResponse(html)
 }
