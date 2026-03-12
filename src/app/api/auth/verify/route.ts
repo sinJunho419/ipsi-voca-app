@@ -78,65 +78,63 @@ export async function POST(request: NextRequest) {
         }
 
         const parts = decrypted.split('|')
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const debugLog: Record<string, any> = {
+            '1_받은_payload': payload,
+            '2_복호화_결과': decrypted,
+            '3_파이프_split': parts,
+            '4_nid': parts[0] || '(없음)',
+            '5_name': parts[1] || '(없음)',
+            '6_timestamp': parts[2] || '(없음)',
+        }
 
-        if (parts.length < 3) {
-            return errorPage('비정상 접근입니다.', IPSI_NAVI_URL)
+        if (parts.length < 3 || !parts[0] || !parts[1] || !parts[2]) {
+            debugLog['ERROR'] = '파싱 실패 (parts < 3 또는 빈값)'
+            return debugPage(debugLog)
         }
 
         const nid = parts[0]
-        const name = parts[1]
         const ts = parseInt(parts[2], 10)
-
-        if (!nid || !name || isNaN(ts)) {
-            return errorPage('비정상 접근입니다.', IPSI_NAVI_URL)
-        }
-
-        // ── 4. 타임스탬프 유효성 (5분) ───────────────────────────────
         const now = Math.floor(Date.now() / 1000)
-        if (Math.abs(now - ts) > FIVE_MINUTES) {
-            return errorPage('인증 시간이 만료되었습니다.', IPSI_NAVI_URL)
-        }
 
-        // ── 5. 입시내비 API 호출 → 회원 상태 확인 ────────────────────
+        debugLog['7_서버_현재시간'] = now
+        debugLog['8_시간차이_초'] = Math.abs(now - ts)
+        debugLog['9_5분_초과여부'] = Math.abs(now - ts) > FIVE_MINUTES
+
+        // ── 입시내비 API 호출 ────────────────────────────────────────
         const verifyApiUrl = 'https://m.ipsinavi.com/api/ipsivoca_Api.asp'
+        const verifyPayload = xorEncryptToBase64(decrypted, secretKey)
 
-        let memberStatus: string
+        debugLog['10_재암호화_payload'] = verifyPayload
+        debugLog['11_원본과_일치'] = payload === verifyPayload
+        debugLog['12_API_URL'] = verifyApiUrl
+
         try {
-            // 복호화된 원본 데이터를 그대로 다시 암호화해서 전송
-            const verifyPayload = xorEncryptToBase64(decrypted, secretKey)
-
             const res = await fetch(verifyApiUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: `payload=${encodeURIComponent(verifyPayload)}`,
             })
 
-            if (!res.ok) {
-                throw new Error(`입시내비 API responded ${res.status}`)
-            }
+            debugLog['13_API_HTTP_status'] = res.status
+            debugLog['14_API_HTTP_ok'] = res.ok
 
             const rawText = await res.text()
-            console.log('입시내비 API 응답 원문:', rawText)
+            debugLog['15_API_응답_원문'] = rawText
 
-            let data: Record<string, unknown>
             try {
-                data = JSON.parse(rawText)
+                const data = JSON.parse(rawText)
+                debugLog['16_API_응답_파싱'] = data
             } catch {
-                console.error('입시내비 API JSON 파싱 실패:', rawText)
-                return errorPage('회원 정보를 확인할 수 없습니다.', IPSI_NAVI_URL)
+                debugLog['16_API_응답_파싱'] = 'JSON 파싱 실패'
             }
-
-            console.log('입시내비 API 파싱 결과:', JSON.stringify(data))
-
-            // ASP 응답 구조에 맞게 status 추출 (status, result, message 등 가능)
-            memberStatus = String(
-                data.status ?? data.result ?? data.message ?? data.msg ?? ''
-            )
         } catch (err) {
-            console.error('입시내비 API call failed:', err)
-            return errorPage('회원 정보를 확인할 수 없습니다.', IPSI_NAVI_URL)
+            debugLog['13_API_호출_에러'] = String(err)
         }
 
+        return debugPage(debugLog)
+
+        /* ── 디버그 확인 후 아래 코드 복원 필요 ──────────────────────
         // ── 6. 상태 판별 ─────────────────────────────────────────────
         if (memberStatus !== 'active') {
             const errorMessages: Record<string, string> = {
@@ -220,9 +218,7 @@ export async function POST(request: NextRequest) {
             {
                 cookies: {
                     getAll() { return cookieStore.getAll() },
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     setAll(cookiesToSet: any[]) {
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         cookiesToSet.forEach(({ name, value, options }: any) =>
                             cookieStore.set(name, value, options)
                         )
@@ -244,6 +240,7 @@ export async function POST(request: NextRequest) {
         // ── 9. /study 리다이렉트 (Supabase 세션 쿠키 이미 설정됨) ────
         const origin = `${request.nextUrl.protocol}//${request.nextUrl.host}`
         return NextResponse.redirect(`${origin}/study`)
+        ── 디버그 주석 끝 ── */
 
     } catch (err) {
         console.error('Verify error:', err)
