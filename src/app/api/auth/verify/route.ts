@@ -190,7 +190,7 @@ export async function POST(request: NextRequest) {
 
         // ── 302 redirect to /study (HTML 반환 X → iPhone 호환) ──
         const origin = `${request.nextUrl.protocol}//${request.nextUrl.host}`
-        return NextResponse.redirect(`${origin}/study`)
+        return NextResponse.redirect(`${origin}/study`, 302)
 
     } catch (err) {
         console.error('Verify error:', err)
