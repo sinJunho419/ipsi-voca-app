@@ -13,18 +13,22 @@ function xorDecrypt(encrypted: Buffer, key: string): string {
 }
 
 /**
- * POST /api/auth/verify
+ * GET /api/auth/verify?payload=xxx
  *
- * 복호화 + 검증 → /auth/loading으로 이동
- * iOS/Android WebView 모두 호환되도록 HTML meta refresh + JS redirect 사용
+ * 단순 URL 이동 방식 — WebView 내부에서 주소창 없이 동작
+ * iPhone/Android 모두 호환
  */
+export async function GET(request: NextRequest) {
+    const payload = request.nextUrl.searchParams.get('payload')
+    return handleVerify(payload, request.nextUrl.origin)
+}
+
+/** POST도 하위 호환을 위해 유지 */
 export async function POST(request: NextRequest) {
-    const IPSI_NAVI_URL = process.env.IPSI_NAVI_URL || 'https://ipsinavi.com'
+    const contentType = request.headers.get('content-type') || ''
+    let payload: string | null = null
 
     try {
-        const contentType = request.headers.get('content-type') || ''
-        let payload: string | null = null
-
         if (contentType.includes('application/x-www-form-urlencoded')) {
             const formData = await request.formData()
             payload = formData.get('payload') as string
@@ -32,28 +36,38 @@ export async function POST(request: NextRequest) {
             const body = await request.json()
             payload = body.payload
         }
+    } catch {
+        payload = null
+    }
 
+    return handleVerify(payload, request.nextUrl.origin)
+}
+
+/** 공통 검증 로직 */
+function handleVerify(payload: string | null, origin: string) {
+    const IPSI_NAVI_URL = process.env.IPSI_NAVI_URL || 'https://ipsinavi.com'
+
+    try {
         if (!payload) {
-            return redirectPage(`/auth/loading?error=${encodeURIComponent('비정상 접근입니다.')}&redirect=${encodeURIComponent(IPSI_NAVI_URL)}`)
+            return errorRedirect('비정상 접근입니다.', IPSI_NAVI_URL, origin)
         }
 
         const secretKey = process.env.VOCA_SECRET_KEY?.trim()
         if (!secretKey) {
-            return redirectPage(`/auth/loading?error=${encodeURIComponent('비정상 접근입니다.')}&redirect=${encodeURIComponent(IPSI_NAVI_URL)}`)
+            return errorRedirect('비정상 접근입니다.', IPSI_NAVI_URL, origin)
         }
 
-        // 복호화 + 기본 검증
         const encrypted = Buffer.from(payload, 'base64')
         let decrypted: string
         try {
             decrypted = xorDecrypt(encrypted, secretKey)
         } catch {
-            return redirectPage(`/auth/loading?error=${encodeURIComponent('비정상 접근입니다.')}&redirect=${encodeURIComponent(IPSI_NAVI_URL)}`)
+            return errorRedirect('비정상 접근입니다.', IPSI_NAVI_URL, origin)
         }
 
         const parts = decrypted.split('|')
         if (parts.length < 3) {
-            return redirectPage(`/auth/loading?error=${encodeURIComponent('비정상 접근입니다.')}&redirect=${encodeURIComponent(IPSI_NAVI_URL)}`)
+            return errorRedirect('비정상 접근입니다.', IPSI_NAVI_URL, origin)
         }
 
         const nid = parts[0]
@@ -61,33 +75,26 @@ export async function POST(request: NextRequest) {
         const ts = parseInt(parts[2], 10)
 
         if (!nid || !name || isNaN(ts)) {
-            return redirectPage(`/auth/loading?error=${encodeURIComponent('비정상 접근입니다.')}&redirect=${encodeURIComponent(IPSI_NAVI_URL)}`)
+            return errorRedirect('비정상 접근입니다.', IPSI_NAVI_URL, origin)
         }
 
         const now = Math.floor(Date.now() / 1000)
         if (Math.abs(now - ts) > FIVE_MINUTES) {
-            return redirectPage(`/auth/loading?error=${encodeURIComponent('인증 시간이 만료되었습니다.')}&redirect=${encodeURIComponent(IPSI_NAVI_URL)}`)
+            return errorRedirect('인증 시간이 만료되었습니다.', IPSI_NAVI_URL, origin)
         }
 
-        // 검증 통과 → 로딩 페이지로 이동
+        // 검증 통과 → 로딩 페이지로 redirect
         const params = new URLSearchParams({ payload, name })
-        return redirectPage(`/auth/loading?${params.toString()}`)
+        return NextResponse.redirect(`${origin}/auth/loading?${params.toString()}`, 302)
 
     } catch (err) {
         console.error('Verify error:', err)
-        const ipsi = process.env.IPSI_NAVI_URL || 'https://ipsinavi.com'
-        return redirectPage(`/auth/loading?error=${encodeURIComponent('비정상 접근입니다.')}&redirect=${encodeURIComponent(ipsi)}`)
+        return errorRedirect('비정상 접근입니다.', IPSI_NAVI_URL, origin)
     }
 }
 
-/** 최소 HTML로 페이지 이동 — iOS/Android WebView 모두 호환 */
-function redirectPage(url: string) {
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=${url}"></head><body><script>location.replace("${url}")</script></body></html>`
-    return new NextResponse(html, {
-        status: 200,
-        headers: {
-            'Content-Type': 'text/html; charset=utf-8',
-            'Content-Disposition': 'inline',
-        },
-    })
+/** 에러 시 로딩 페이지로 redirect */
+function errorRedirect(message: string, redirectUrl: string, origin: string) {
+    const params = new URLSearchParams({ error: message, redirect: redirectUrl })
+    return NextResponse.redirect(`${origin}/auth/loading?${params.toString()}`, 302)
 }
