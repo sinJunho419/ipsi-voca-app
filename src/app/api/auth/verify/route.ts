@@ -5,6 +5,13 @@ import { NextRequest, NextResponse } from 'next/server'
 
 const FIVE_MINUTES = 5 * 60
 
+// 모듈 레벨에서 1회만 생성 (매 요청마다 재생성 방지)
+const adminClient = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+)
+
 /**
  * 입시내비 → 입시보카 인증
  *
@@ -59,22 +66,22 @@ export async function POST(request: NextRequest) {
             payload = body.payload
         }
 
-        // ── 임시 디버그: 무조건 복호화 결과를 화면에 표시 ─────────
         if (!payload) {
-            return debugPage({ error: 'payload가 없습니다', contentType })
+            return errorPage('비정상 접근입니다.', IPSI_NAVI_URL)
         }
 
         const secretKey = process.env.VOCA_SECRET_KEY?.trim()
         if (!secretKey) {
-            return debugPage({ error: 'VOCA_SECRET_KEY 미설정', payload })
+            console.error('VOCA_SECRET_KEY 미설정')
+            return errorPage('비정상 접근입니다.', IPSI_NAVI_URL)
         }
 
         const encrypted = Buffer.from(payload, 'base64')
         let decrypted: string
         try {
             decrypted = xorDecrypt(encrypted, secretKey)
-        } catch (e) {
-            return debugPage({ error: '복호화 실패', payload, detail: String(e) })
+        } catch {
+            return errorPage('비정상 접근입니다.', IPSI_NAVI_URL)
         }
 
         const parts = decrypted.split('|')
@@ -138,13 +145,7 @@ export async function POST(request: NextRequest) {
             return errorPage(statusMsg, IPSI_NAVI_URL)
         }
 
-        // ── 7. Supabase 유저 생성/조회 ───────────────────────────────
-        const adminClient = createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.SUPABASE_SERVICE_ROLE_KEY!,
-            { auth: { autoRefreshToken: false, persistSession: false } }
-        )
-
+        // ── 7. Supabase 유저 생성 + Magic Link 생성 ────────────────────
         const email = `nid_${nid}@inputnavi.internal`
         const displayName = name || `학생_${nid}`
 
@@ -159,7 +160,7 @@ export async function POST(request: NextRequest) {
             },
         })
 
-        // ── 8. Magic Link 생성 (유저 정보도 함께 리턴됨) ─────────────
+        // Magic Link 생성 (유저 정보도 함께 리턴됨)
         const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
             type: 'magiclink',
             email,
@@ -170,15 +171,8 @@ export async function POST(request: NextRequest) {
             return errorPage('세션 생성에 실패했습니다.', IPSI_NAVI_URL)
         }
 
-        // generateLink가 리턴하는 user로 프로필 업데이트
+        // ── 8. 프로필 업데이트 + 세션 설정 (병렬 실행) ──────────────
         const userId = linkData.user.id
-        await adminClient.auth.admin.updateUserById(userId, {
-            user_metadata: { nid, sname: displayName, source: 'inputnavi' },
-        })
-        await adminClient.from('profiles').upsert(
-            { id: userId, name: displayName },
-            { onConflict: 'id' }
-        )
 
         const cookieStore = await cookies()
         const serverClient = createServerClient(
@@ -198,13 +192,23 @@ export async function POST(request: NextRequest) {
             }
         )
 
-        const { error: otpError } = await serverClient.auth.verifyOtp({
-            token_hash: linkData.properties.hashed_token,
-            type: 'email',
-        })
+        // 프로필 업데이트 2개 + OTP 검증을 병렬 실행
+        const [,, otpResult] = await Promise.all([
+            adminClient.auth.admin.updateUserById(userId, {
+                user_metadata: { nid, sname: displayName, source: 'inputnavi' },
+            }),
+            adminClient.from('profiles').upsert(
+                { id: userId, name: displayName },
+                { onConflict: 'id' }
+            ),
+            serverClient.auth.verifyOtp({
+                token_hash: linkData.properties.hashed_token,
+                type: 'email',
+            }),
+        ])
 
-        if (otpError) {
-            console.error('verifyOtp error:', otpError.message)
+        if (otpResult.error) {
+            console.error('verifyOtp error:', otpResult.error.message)
             return errorPage('세션 설정에 실패했습니다.', IPSI_NAVI_URL)
         }
 
@@ -216,57 +220,6 @@ export async function POST(request: NextRequest) {
         console.error('Verify error:', err)
         return errorPage('비정상 접근입니다.', IPSI_NAVI_URL)
     }
-}
-
-/** 디버그용 GET 핸들러 - 라우트 존재 확인 */
-export async function GET(request: NextRequest) {
-    const url = request.url
-    const method = request.method
-    const headers = Object.fromEntries(request.headers.entries())
-
-    return new NextResponse(JSON.stringify({
-        ok: true,
-        message: 'verify 라우트 정상 동작',
-        url,
-        method,
-        timestamp: new Date().toISOString(),
-        env: {
-            VOCA_SECRET_KEY: process.env.VOCA_SECRET_KEY ? '설정됨' : '미설정',
-            SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL ? '설정됨' : '미설정',
-        },
-        headers: {
-            'content-type': headers['content-type'] || 'none',
-            'user-agent': headers['user-agent'] || 'none',
-        },
-    }, null, 2), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-    })
-}
-
-/** 디버그 정보를 화면에 표시 (VOCA_DEBUG=true 일 때만) */
-function debugPage(data: Record<string, unknown>) {
-    const html = `<!DOCTYPE html>
-<html lang="ko">
-<head><meta charset="utf-8"><title>입시보카 - 디버그</title>
-<style>
-body { font-family: monospace; background: #1a1a2e; color: #eee; padding: 20px; }
-h1 { color: #6C63FF; }
-pre { background: #16213e; padding: 16px; border-radius: 8px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
-.key { color: #fbbf24; }
-.val { color: #34d399; }
-</style>
-</head>
-<body>
-<h1>🔍 Verify 디버그</h1>
-<pre>${JSON.stringify(data, null, 2)}</pre>
-</body>
-</html>`
-
-    return new NextResponse(html, {
-        status: 200,
-        headers: { 'Content-Type': 'text/html; charset=utf-8' },
-    })
 }
 
 /** 경고창 + 입시내비로 리다이렉트하는 HTML 응답 */
