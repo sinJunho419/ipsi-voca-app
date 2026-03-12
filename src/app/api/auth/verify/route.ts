@@ -188,14 +188,35 @@ export async function POST(request: NextRequest) {
 
         console.log(`[auth] ${nid} 완료 +${Date.now() - t0}ms`)
 
-        // ── redirect to /study (원본과 동일한 방식) ──
-        const origin = `${request.nextUrl.protocol}//${request.nextUrl.host}`
-        return NextResponse.redirect(`${origin}/study`)
+        // ── /study로 이동 (에러 페이지와 동일한 HTML 방식) ──
+        return successPage(displayName)
 
     } catch (err) {
         console.error('Verify error:', err)
         return errorPage('비정상 접근입니다.', IPSI_NAVI_URL)
     }
+}
+
+/** 성공: 환영 화면 + /study로 이동 (에러 페이지와 동일한 HTML 구조) */
+function successPage(userName: string) {
+    const html = `<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>입시보카</title></head>
+<body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0f0c29,#302b63,#24243e);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#fff">
+<div style="text-align:center">
+  <div style="font-size:2.2rem;font-weight:800;background:linear-gradient(135deg,#6C63FF,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:1rem">입시보카</div>
+  <div style="font-size:1.1rem;color:#c4b5fd">${userName}님, 환영합니다!</div>
+</div>
+<script>
+  setTimeout(function(){ window.location.href = "/study"; }, 1500);
+</script>
+</body>
+</html>`
+
+    return new NextResponse(html, {
+        status: 200,
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+    })
 }
 
 /** 에러: 경고창 + 입시내비로 이동 */
