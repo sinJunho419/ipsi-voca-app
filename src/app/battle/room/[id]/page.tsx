@@ -111,6 +111,7 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
     }, [roomId, supabase])
 
     // 3. 참여자 이름 조회 (participant_ids 변경 시)
+    const participantKey = (room?.participant_ids || []).join(',')
     useEffect(() => {
         const ids = room?.participant_ids
         if (!ids?.length) return
@@ -127,7 +128,7 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
             }
         }
         fetchNames()
-    }, [room?.participant_ids?.length, supabase]) // eslint-disable-line react-hooks/exhaustive-deps
+    }, [participantKey, supabase]) // eslint-disable-line react-hooks/exhaustive-deps
 
     // 3.5. 전적 기록 조회
     useEffect(() => {
@@ -156,7 +157,7 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
             setRecords(rec)
         }
         fetchRecords()
-    }, [room?.participant_ids?.length, supabase]) // eslint-disable-line react-hooks/exhaustive-deps
+    }, [participantKey, supabase]) // eslint-disable-line react-hooks/exhaustive-deps
 
     // 4. Presence 채널 - 방장 이탈 감지 & 자동 위임 (디바운스)
     const hostTransferTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -213,9 +214,13 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
         }
     }, [room?.status, room?.host_id, room?.participant_ids?.length, userId, roomId, supabase])
 
-    // 5. 대기 타이머 (60초)
+    // 5. 대기 타이머 (60초) — 최초 1회만 시작
+    const timerStartedRef = useRef(false)
+
     useEffect(() => {
         if (!room || room.status !== 'waiting') return
+        if (timerStartedRef.current) return // 이미 시작됨 → 재실행 방지
+        timerStartedRef.current = true
 
         setWaitSeconds(60)
         waitTimerRef.current = setInterval(() => {
@@ -246,7 +251,7 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
                 fetch('/api/battle', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'start', roomId }),
+                    body: JSON.stringify({ action: 'start', roomId, hostId: userId }),
                 })
             } else {
                 // 방장 혼자: 방 폭파 → 로비로 이동
@@ -319,7 +324,7 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
         const res = await fetch('/api/battle', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'start', roomId }),
+            body: JSON.stringify({ action: 'start', roomId, hostId: userId }),
         })
 
         if (!res.ok) {
