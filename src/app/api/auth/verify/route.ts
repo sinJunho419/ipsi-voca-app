@@ -47,10 +47,11 @@ function xorEncryptToBase64(plaintext: string, key: string): string {
 export async function POST(request: NextRequest) {
     const IPSI_NAVI_URL = process.env.IPSI_NAVI_URL || 'https://ipsinavi.com'
     const t0 = Date.now()
+    const contentType = request.headers.get('content-type') || ''
+    const isJsonRequest = contentType.includes('application/json')
 
     try {
         // ── payload 추출 ──
-        const contentType = request.headers.get('content-type') || ''
         let payload: string | null = null
 
         if (contentType.includes('application/x-www-form-urlencoded')) {
@@ -62,12 +63,12 @@ export async function POST(request: NextRequest) {
         }
 
         if (!payload) {
-            return errorPage('비정상 접근입니다.', IPSI_NAVI_URL)
+            return sendError('비정상 접근입니다.', IPSI_NAVI_URL, isJsonRequest)
         }
 
         const secretKey = process.env.VOCA_SECRET_KEY?.trim()
         if (!secretKey) {
-            return errorPage('비정상 접근입니다.', IPSI_NAVI_URL)
+            return sendError('비정상 접근입니다.', IPSI_NAVI_URL, isJsonRequest)
         }
 
         // ── 복호화 + 검증 ──
@@ -76,12 +77,12 @@ export async function POST(request: NextRequest) {
         try {
             decrypted = xorDecrypt(encrypted, secretKey)
         } catch {
-            return errorPage('비정상 접근입니다.', IPSI_NAVI_URL)
+            return sendError('비정상 접근입니다.', IPSI_NAVI_URL, isJsonRequest)
         }
 
         const parts = decrypted.split('|')
         if (parts.length < 3) {
-            return errorPage('비정상 접근입니다.', IPSI_NAVI_URL)
+            return sendError('비정상 접근입니다.', IPSI_NAVI_URL, isJsonRequest)
         }
 
         const nid = parts[0]
@@ -89,12 +90,12 @@ export async function POST(request: NextRequest) {
         const ts = parseInt(parts[2], 10)
 
         if (!nid || !name || isNaN(ts)) {
-            return errorPage('비정상 접근입니다.', IPSI_NAVI_URL)
+            return sendError('비정상 접근입니다.', IPSI_NAVI_URL, isJsonRequest)
         }
 
         const now = Math.floor(Date.now() / 1000)
         if (Math.abs(now - ts) > FIVE_MINUTES) {
-            return errorPage('인증 시간이 만료되었습니다.', IPSI_NAVI_URL)
+            return sendError('인증 시간이 만료되었습니다.', IPSI_NAVI_URL, isJsonRequest)
         }
 
         const email = `nid_${nid}@inputnavi.internal`
@@ -139,7 +140,7 @@ export async function POST(request: NextRequest) {
         }
 
         if (!linkData?.properties?.hashed_token) {
-            return errorPage('세션 생성에 실패했습니다.', IPSI_NAVI_URL)
+            return sendError('세션 생성에 실패했습니다.', IPSI_NAVI_URL, isJsonRequest)
         }
 
         const userId = linkData.user.id
@@ -171,7 +172,7 @@ export async function POST(request: NextRequest) {
 
         if (otpResult.error) {
             console.error('verifyOtp error:', otpResult.error.message)
-            return errorPage('세션 설정에 실패했습니다.', IPSI_NAVI_URL)
+            return sendError('세션 설정에 실패했습니다.', IPSI_NAVI_URL, isJsonRequest)
         }
 
         // ── fire-and-forget: updateUser, profiles upsert ──
@@ -188,44 +189,44 @@ export async function POST(request: NextRequest) {
 
         console.log(`[auth] ${nid} 완료 +${Date.now() - t0}ms`)
 
-        // ── /study로 이동 (에러 페이지와 동일한 HTML 방식) ──
-        return successPage(displayName)
+        // ── 응답 ──
+        const studyUrl = `/study?welcome=${encodeURIComponent(displayName)}`
+
+        if (isJsonRequest) {
+            return NextResponse.json({ ok: true, redirectUrl: studyUrl })
+        }
+
+        // HTML+JS redirect (Android/PC form POST 호환)
+        return htmlResponse(`<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>입시보카</title></head>
+<body>
+<script>window.location.replace("${studyUrl}");</script>
+</body>
+</html>`)
 
     } catch (err) {
         console.error('Verify error:', err)
-        return errorPage('비정상 접근입니다.', IPSI_NAVI_URL)
+        return sendError('비정상 접근입니다.', IPSI_NAVI_URL, isJsonRequest)
     }
 }
 
-/** 성공: 환영 화면 + /study로 이동 (에러 페이지와 동일한 HTML 구조) */
-function successPage(userName: string) {
-    const html = `<!DOCTYPE html>
-<html lang="ko">
-<head><meta charset="utf-8"><title>입시보카</title></head>
-<body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0f0c29,#302b63,#24243e);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#fff">
-<div style="text-align:center">
-  <div style="font-size:8rem;font-weight:800;background:linear-gradient(135deg,#6C63FF,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:1.5rem">입시보카</div>
-  <div style="font-size:4rem;color:#c4b5fd">${userName}님, 환영합니다!</div>
-</div>
-<script>
-  setTimeout(function(){ window.location.href = "/study"; }, 1500);
-</script>
-</body>
-</html>`
-
-    return htmlResponse(html)
-}
-
-/** iOS 호환 HTML 응답 헤더 */
+/** HTML 응답 헤더 */
 function htmlResponse(html: string) {
     return new NextResponse(html, {
         status: 200,
         headers: {
             'Content-Type': 'text/html; charset=utf-8',
-            'Content-Disposition': 'inline',
-            'X-Frame-Options': 'ALLOWALL',
         },
     })
+}
+
+/** 에러 응답 분기 (JSON or HTML) */
+function sendError(message: string, redirectUrl: string, isJson: boolean) {
+    if (isJson) {
+        return NextResponse.json({ ok: false, message }, { status: 401 })
+    }
+    return errorPage(message, redirectUrl)
 }
 
 /** 에러: 경고창 + 입시내비로 이동 */
