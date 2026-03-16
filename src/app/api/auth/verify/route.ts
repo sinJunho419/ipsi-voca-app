@@ -63,12 +63,12 @@ export async function POST(request: NextRequest) {
         }
 
         if (!payload) {
-            return sendError('비정상 접근입니다.', IPSI_NAVI_URL, isJsonRequest)
+            return sendError('[E1] payload 없음', IPSI_NAVI_URL, isJsonRequest)
         }
 
         const secretKey = process.env.VOCA_SECRET_KEY?.trim()
         if (!secretKey) {
-            return sendError('비정상 접근입니다.', IPSI_NAVI_URL, isJsonRequest)
+            return sendError('[E2] 서버 키 미설정', IPSI_NAVI_URL, isJsonRequest)
         }
 
         // ── 복호화 + 검증 ──
@@ -77,12 +77,12 @@ export async function POST(request: NextRequest) {
         try {
             decrypted = xorDecrypt(encrypted, secretKey)
         } catch {
-            return sendError('비정상 접근입니다.', IPSI_NAVI_URL, isJsonRequest)
+            return sendError('[E3] 복호화 실패', IPSI_NAVI_URL, isJsonRequest)
         }
 
         const parts = decrypted.split('|')
         if (parts.length < 3) {
-            return sendError('비정상 접근입니다.', IPSI_NAVI_URL, isJsonRequest)
+            return sendError(`[E4] 형식 오류 (parts=${parts.length})`, IPSI_NAVI_URL, isJsonRequest)
         }
 
         const nid = parts[0]
@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
         const ts = parseInt(parts[2], 10)
 
         if (!nid || !name || isNaN(ts)) {
-            return sendError('비정상 접근입니다.', IPSI_NAVI_URL, isJsonRequest)
+            return sendError(`[E5] 값 누락 (nid=${nid}, name=${name}, ts=${ts})`, IPSI_NAVI_URL, isJsonRequest)
         }
 
         const now = Math.floor(Date.now() / 1000)
