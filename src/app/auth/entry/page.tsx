@@ -1,11 +1,12 @@
 'use client'
 
-import { Suspense, useEffect, useRef } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 
 function EntryForm() {
     const params = useSearchParams()
     const submitted = useRef(false)
+    const [status, setStatus] = useState('인증 확인 중...')
 
     useEffect(() => {
         if (submitted.current) return
@@ -13,10 +14,11 @@ function EntryForm() {
 
         const payload = params.get('p')
         if (!payload) {
-            alert('인증 정보가 없습니다.')
-            history.back()
+            setStatus('인증 정보가 없습니다.')
             return
         }
+
+        setStatus('서버 인증 요청 중...')
 
         fetch('/api/auth/verify', {
             method: 'POST',
@@ -25,17 +27,23 @@ function EntryForm() {
             credentials: 'same-origin',
         })
             .then(async res => {
-                const data = await res.json()
+                const text = await res.text()
+                let data
+                try {
+                    data = JSON.parse(text)
+                } catch {
+                    setStatus(`응답 파싱 실패: ${text.substring(0, 200)}`)
+                    return
+                }
                 if (data.ok && data.redirectUrl) {
+                    setStatus('인증 성공! 이동 중...')
                     window.location.replace(data.redirectUrl)
                 } else {
-                    alert(data.message || '인증에 실패했습니다.')
-                    history.back()
+                    setStatus(data.message || '인증에 실패했습니다.')
                 }
             })
-            .catch(() => {
-                alert('네트워크 오류가 발생했습니다.')
-                history.back()
+            .catch((err) => {
+                setStatus(`네트워크 오류: ${err.message}`)
             })
     }, [params])
 
@@ -55,7 +63,7 @@ function EntryForm() {
                     WebkitTextFillColor: 'transparent',
                 }}>입시보카</div>
                 <div style={{ marginTop: '1.5rem', fontSize: '1.2rem', color: '#c4b5fd' }}>
-                    인증 확인 중...
+                    {status}
                 </div>
             </div>
         </div>
