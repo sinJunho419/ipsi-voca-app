@@ -155,7 +155,9 @@ export default function BattleClient({ room, myId }: Props) {
     // Broadcast 채널 ref
     const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
 
-    const isHost = room.host_id === myId
+    const isOriginalHost = room.host_id === myId
+    const [isActingHost, setIsActingHost] = useState(false)
+    const isHost = isOriginalHost || isActingHost
     const myScore = scores[myId] || 0
     const tierInfo = room.level ? getTierInfo(room.level as Level) : null
 
@@ -277,6 +279,16 @@ export default function BattleClient({ room, myId }: Props) {
                 if (leftId !== myId) {
                     setLeftPlayers(prev => new Set(prev).add(leftId))
                     setScores(prev => ({ ...prev, [leftId]: 0 }))
+
+                    // 방장이 이탈한 경우: 대리 방장 승격
+                    if (leftId === room.host_id) {
+                        const participants = room.participant_ids || []
+                        const nextHost = participants.find(id => id !== room.host_id && id !== leftId)
+                        if (nextHost === myId) {
+                            setIsActingHost(true)
+                            console.log('[battle] 방장 player_left → 대리 방장 승격')
+                        }
+                    }
                 }
             })
             .subscribe()
@@ -288,6 +300,42 @@ export default function BattleClient({ room, myId }: Props) {
             channelRef.current = null
         }
     }, [room.id, myId, supabase])
+
+    // 배틀 중 Presence 추적 (전원 참여) + 방장 이탈 감지 → 대리 방장 승격
+    useEffect(() => {
+        const presenceChannel = supabase.channel(`battle-presence:${room.id}`)
+
+        presenceChannel
+            .on('presence', { event: 'sync' }, () => {
+                // 방장은 감지 불필요
+                if (isOriginalHost) return
+
+                const state = presenceChannel.presenceState()
+                const onlineIds = Object.values(state)
+                    .flat()
+                    .map((p: Record<string, unknown>) => p.user_id as string)
+
+                const hostOffline = !onlineIds.includes(room.host_id)
+                if (!hostOffline) return
+
+                // 온라인 참여자 중 방장이 아닌 첫 번째가 대리 방장
+                const participants = room.participant_ids || []
+                const nextHost = participants.find(
+                    id => id !== room.host_id && onlineIds.includes(id)
+                )
+                if (nextHost === myId) {
+                    setIsActingHost(true)
+                    console.log('[battle] 방장 이탈 감지 → 대리 방장 승격')
+                }
+            })
+            .subscribe(async (status) => {
+                if (status === 'SUBSCRIBED') {
+                    await presenceChannel.track({ user_id: myId })
+                }
+            })
+
+        return () => { supabase.removeChannel(presenceChannel) }
+    }, [room.id, room.host_id, room.participant_ids, myId, isOriginalHost, supabase])
 
     // 자동 발음
     useEffect(() => {
