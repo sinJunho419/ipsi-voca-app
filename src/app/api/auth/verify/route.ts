@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
 
         const parts = decrypted.split('|')
         if (parts.length < 3) {
-            return sendError(`[E4] 형식 오류 (parts=${parts.length})`, IPSI_NAVI_URL, isJsonRequest)
+            return sendError(`[E4] 형식 오류 (parts=${parts.length}) | 복호화결과: ${decrypted.substring(0, 100)} | 키길이: ${secretKey.length} | payload길이: ${payload.length}`, IPSI_NAVI_URL, isJsonRequest)
         }
 
         const nid = parts[0]
