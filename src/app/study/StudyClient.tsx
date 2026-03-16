@@ -231,6 +231,7 @@ export default function StudyClient({ initialWords, initialMaxSet }: Props) {
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         transition={{ duration: 0.3 }}
+                        onClick={() => setShowWelcome(false)}
                     >
                         <motion.div
                             className={styles.welcomeContent}
