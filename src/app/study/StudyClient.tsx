@@ -38,16 +38,10 @@ export default function StudyClient({ initialWords, initialMaxSet }: Props) {
     // 환영 오버레이
     const searchParams = useSearchParams()
     const welcomeParam = searchParams.get('welcome')
-    const [showWelcome, setShowWelcome] = useState(false)
-    const [welcomeName, setWelcomeName] = useState<string | null>(null)
 
     useEffect(() => {
         if (!welcomeParam) return
-        setWelcomeName(welcomeParam)
-        setShowWelcome(true)
         window.history.replaceState({}, '', '/study')
-        const timer = setTimeout(() => setShowWelcome(false), 1800)
-        return () => clearTimeout(timer)
     }, [welcomeParam])
 
     const [tab, setTab] = useState<Tab>('study')
@@ -222,30 +216,7 @@ export default function StudyClient({ initialWords, initialMaxSet }: Props) {
 
     return (
         <div className={styles.page}>
-            {/* 환영 오버레이 */}
-            <AnimatePresence>
-                {showWelcome && (
-                    <motion.div
-                        className={styles.welcomeOverlay}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: 0.3 }}
-                        onClick={() => setShowWelcome(false)}
-                    >
-                        <motion.div
-                            className={styles.welcomeContent}
-                            initial={{ opacity: 0, y: 20, scale: 0.95 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: -10, scale: 0.98 }}
-                            transition={spring}
-                        >
-                            <div className={styles.welcomeLogo}>입시보카</div>
-                            <div className={styles.welcomeGreeting}>{welcomeName}님, 환영합니다!</div>
-                        </motion.div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+            {/* 환영 오버레이 제거됨 - 모바일 호환성 문제 */}
             <BattleFeed />
             {/* 벤토 그리드 */}
             <div className={styles.bento}>
