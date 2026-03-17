@@ -44,7 +44,8 @@ function EntryForm() {
                         const cookieValue = encodeURIComponent(JSON.stringify(data.loginInfo))
                         document.cookie = `ipsinavi_login=${cookieValue}; path=/; max-age=86400; secure; samesite=lax`
                     }
-                    setStatus('인증 성공! 이동 중...')
+                    const userName = data.loginInfo?.UserName || ''
+                    setStatus(`${userName}님, 환영합니다!`)
                     window.location.replace(data.redirectUrl)
                 } else {
                     setStatus(data.message || '인증에 실패했습니다.')

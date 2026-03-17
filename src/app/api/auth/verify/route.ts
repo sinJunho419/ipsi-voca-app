@@ -103,34 +103,36 @@ export async function POST(request: NextRequest) {
 
         console.log(`[auth] ${nid} 시작 +${Date.now() - t0}ms`)
 
-        // ── 입시내비 API: 사용자 검증 + 학원 정보 수신 ──
-        // 응답 예상: { status: "active"|"inactive", NsiteID: 123, Scomment: "학원명" }
+        // ── 입시내비 API + DB 조회 병렬 실행 ──
         const verifyPayload = xorEncryptToBase64(decrypted, secretKey)
-        let ipsiStatus = 'active'
-        let ipsiNsiteID: number | null = null
-        let ipsiScomment: string | null = null
-        try {
-            const ipsiRes = await fetch('https://m.ipsinavi.com/ipsivoca_Api.asp', {
+        const nidNum = parseInt(nid, 10)
+
+        const [ipsiResult, dbResult] = await Promise.all([
+            // 입시내비 API: 사용자 검증 + 학원 정보 수신
+            fetch('https://m.ipsinavi.com/ipsivoca_Api.asp', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: `payload=${encodeURIComponent(verifyPayload)}`,
-            })
-            const ipsiData = await ipsiRes.json()
-            ipsiStatus = ipsiData.status || 'active'
-            ipsiNsiteID = ipsiData.NsiteID ? Number(ipsiData.NsiteID) : null
-            ipsiScomment = ipsiData.Scomment || null
-            console.log(`[auth] ${nid} 입시내비 검증: status=${ipsiStatus}, NsiteID=${ipsiNsiteID}, Scomment=${ipsiScomment} +${Date.now() - t0}ms`)
-        } catch (e) {
-            console.warn(`[auth] ${nid} 입시내비 API 호출 실패, 기본 active 처리`, e)
-        }
+            }).then(r => r.json()).catch(() => null),
+            // DB 조회
+            adminClient
+                .from('ipsinavi_login_info')
+                .select('id, UserName, NsiteID, Scomment, status')
+                .eq('UserNID', nidNum)
+                .single(),
+        ])
 
-        // ── ipsinavi_Login_info 회원 정보 관리 ──
-        const nidNum = parseInt(nid, 10)
-        const { data: existingLogin } = await adminClient
-            .from('ipsinavi_login_info')
-            .select('id, UserName, NsiteID, Scomment, status')
-            .eq('UserNID', nidNum)
-            .single()
+        let ipsiStatus = 'active'
+        let ipsiNsiteID: number | null = null
+        let ipsiScomment: string | null = null
+        if (ipsiResult) {
+            ipsiStatus = ipsiResult.status || 'active'
+            ipsiNsiteID = ipsiResult.NsiteID ? Number(ipsiResult.NsiteID) : null
+            ipsiScomment = ipsiResult.Scomment || null
+        }
+        console.log(`[auth] ${nid} 병렬완료: status=${ipsiStatus}, NsiteID=${ipsiNsiteID} +${Date.now() - t0}ms`)
+
+        const existingLogin = dbResult.data
 
         if (ipsiStatus !== 'active') {
             // 탈퇴 회원: 기존 레코드가 있으면 status를 inactive로 업데이트
@@ -240,11 +242,13 @@ export async function POST(request: NextRequest) {
             return sendError('세션 설정에 실패했습니다.', IPSI_NAVI_URL, isJsonRequest)
         }
 
-        // ── supabase_uid 연결 + user_metadata에 login_info_id 저장 ──
-        await adminClient
-            .from('ipsinavi_login_info')
-            .update({ supabase_uid: userId })
-            .eq('id', loginInfoId)
+        // ── supabase_uid 연결 + user_metadata 저장 (fire-and-forget) ──
+        Promise.resolve(
+            adminClient
+                .from('ipsinavi_login_info')
+                .update({ supabase_uid: userId })
+                .eq('id', loginInfoId)
+        ).catch(() => {})
 
         adminClient.auth.admin.updateUserById(userId, {
             user_metadata: { nid, sname: displayName, source: 'inputnavi', login_info_id: loginInfoId },
