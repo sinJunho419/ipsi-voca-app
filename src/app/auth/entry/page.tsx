@@ -1,50 +1,22 @@
 'use client'
 
-import { Suspense, useEffect, useRef, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 
 function EntryForm() {
     const params = useSearchParams()
-    const submitted = useRef(false)
     const [status, setStatus] = useState('인증 확인 중...')
 
     useEffect(() => {
-        if (submitted.current) return
-        submitted.current = true
-
         const payload = params.get('p')
         if (!payload) {
             setStatus('인증 정보가 없습니다.')
             return
         }
 
-        setStatus('서버 인증 요청 중...')
-
-        fetch('/api/auth/verify', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ payload }),
-            credentials: 'same-origin',
-        })
-            .then(async res => {
-                const text = await res.text()
-                let data
-                try {
-                    data = JSON.parse(text)
-                } catch {
-                    setStatus(`응답 파싱 실패: ${text.substring(0, 200)}`)
-                    return
-                }
-                if (data.ok && data.redirectUrl) {
-                    setStatus('인증 성공! 이동 중...')
-                    window.location.replace(data.redirectUrl)
-                } else {
-                    setStatus(data.message || '인증에 실패했습니다.')
-                }
-            })
-            .catch((err) => {
-                setStatus(`네트워크 오류: ${err.message}`)
-            })
+        // payload를 sessionStorage에 저장하고 URL에서 제거
+        sessionStorage.setItem('auth_payload', payload)
+        window.location.replace('/auth/loading')
     }, [params])
 
     return (

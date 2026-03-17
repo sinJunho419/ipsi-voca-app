@@ -1,58 +1,71 @@
 'use client'
 
-import { useSearchParams } from 'next/navigation'
 import { useEffect, useState, Suspense } from 'react'
 
-const IPSI_NAVI_URL = 'https://ipsinavi.com'
-
 function LoadingContent() {
-    const searchParams = useSearchParams()
-    const payload = searchParams.get('payload')
-    const name = searchParams.get('name')
-    const error = searchParams.get('error')
-    const redirect = searchParams.get('redirect') || IPSI_NAVI_URL
     const [status, setStatus] = useState('로그인 처리 중')
+    const [showUI, setShowUI] = useState(false)
 
     useEffect(() => {
-        if (error) {
-            alert(error)
-            window.location.href = redirect
-            return
-        }
+        // sessionStorage에서 payload 꺼내고 즉시 삭제
+        const payload = sessionStorage.getItem('auth_payload')
+        sessionStorage.removeItem('auth_payload')
 
         if (!payload) {
-            alert('비정상 접근입니다.')
-            window.location.href = IPSI_NAVI_URL
+            alert('잘못된 접근입니다.')
+            window.close()
+            // window.close() 불가 환경 대비
+            setStatus('잘못된 접근입니다. 이 창을 닫아주세요.')
             return
         }
 
-        async function createSession() {
+        setShowUI(true)
+
+        async function verify() {
             try {
-                const res = await fetch('/api/auth/verify/session', {
+                const res = await fetch('/api/auth/verify', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ payload }),
                     credentials: 'same-origin',
                 })
-                const data = await res.json()
-                if (data.ok) {
+
+                const text = await res.text()
+                let data
+                try {
+                    data = JSON.parse(text)
+                } catch {
+                    setStatus(`응답 파싱 실패`)
+                    return
+                }
+
+                if (data.ok && data.redirectUrl) {
                     setStatus('로그인 완료!')
-                    window.location.href = '/study'
+                    window.location.replace(data.redirectUrl)
                 } else {
-                    alert(data.error || '로그인에 실패했습니다.')
-                    window.location.href = IPSI_NAVI_URL
+                    setStatus(data.message || '인증에 실패했습니다.')
                 }
             } catch {
-                alert('로그인 처리 중 오류가 발생했습니다.')
-                window.location.href = IPSI_NAVI_URL
+                setStatus('네트워크 오류가 발생했습니다.')
             }
         }
 
-        createSession()
-    }, [payload, error, redirect])
+        verify()
+    }, [])
 
-    // 에러 시에는 아무것도 표시하지 않음 (alert 후 즉시 redirect)
-    if (error || !payload) return null
+    if (!showUI) {
+        return (
+            <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                minHeight: '100vh', background: 'linear-gradient(135deg,#0f0c29,#302b63,#24243e)',
+                color: '#fff', fontFamily: 'sans-serif',
+            }}>
+                <div style={{ textAlign: 'center' }}>
+                    <h2>{status}</h2>
+                </div>
+            </div>
+        )
+    }
 
     return (
         <>
@@ -60,7 +73,6 @@ function LoadingContent() {
             <div className="bg-orb orb2" />
             <div className="container">
                 <div className="logo">입시보카</div>
-                <div className="greeting">{name}님, 환영합니다!</div>
                 <div className="spinner-wrap"><div className="spinner" /></div>
                 <div className="status">{status}<span className="dots" /></div>
             </div>
@@ -81,11 +93,6 @@ function LoadingContent() {
                     background: linear-gradient(135deg, #6C63FF, #a78bfa);
                     -webkit-background-clip: text;
                     -webkit-text-fill-color: transparent;
-                    margin-bottom: 1.5rem;
-                }
-                .greeting {
-                    font-size: 1.1rem;
-                    color: #c4b5fd;
                     margin-bottom: 2rem;
                 }
                 .spinner-wrap {
@@ -147,8 +154,14 @@ function LoadingContent() {
 
 export default function AuthLoadingPage() {
     return (
-        <Suspense>
-            <LoadingContent />
-        </Suspense>
+        <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            minHeight: '100vh', background: 'linear-gradient(135deg,#0f0c29,#302b63,#24243e)',
+            fontFamily: '-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif',
+        }}>
+            <Suspense>
+                <LoadingContent />
+            </Suspense>
+        </div>
     )
 }
