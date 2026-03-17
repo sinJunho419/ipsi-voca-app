@@ -385,9 +385,13 @@ export default function BattleClient({ room, myId }: Props) {
         setQuizState('wrong')
     }, [timerProgress, quizState, stopTimer])
 
-    // 문제 변경 시 타이머 시작
+    // 문제 변경 시 타이머 시작 (index가 바뀔 때만)
+    const prevIndexRef = useRef(-1)
     useEffect(() => {
         if (quizState !== 'playing' || quiz.length === 0) return
+        // 같은 index에서 quizState만 바뀐 경우(wrong→playing) 중복 시작 방지
+        if (prevIndexRef.current === index) return
+        prevIndexRef.current = index
         const current = quiz[index]
         startTimer(current ? getTimerSec(current.word, current.useSentence) : 4)
         return () => stopTimer()
