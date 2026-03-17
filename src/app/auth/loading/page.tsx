@@ -40,6 +40,11 @@ function LoadingContent() {
                 }
 
                 if (data.ok && data.redirectUrl) {
+                    // ipsinavi_login 쿠키 설정 (1일 유효)
+                    if (data.loginInfo) {
+                        const cookieValue = encodeURIComponent(JSON.stringify(data.loginInfo))
+                        document.cookie = `ipsinavi_login=${cookieValue}; path=/; max-age=86400; secure; samesite=lax`
+                    }
                     setStatus('로그인 완료!')
                     window.location.replace(data.redirectUrl)
                 } else {

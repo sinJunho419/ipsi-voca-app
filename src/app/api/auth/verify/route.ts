@@ -103,18 +103,83 @@ export async function POST(request: NextRequest) {
 
         console.log(`[auth] ${nid} 시작 +${Date.now() - t0}ms`)
 
-        // ── 입시내비 API: fire-and-forget ──
+        // ── 입시내비 API: 사용자 검증 + 학원 정보 수신 ──
+        // 응답 예상: { status: "active"|"inactive", NsiteID: 123, Scomment: "학원명" }
         const verifyPayload = xorEncryptToBase64(decrypted, secretKey)
-        fetch('https://m.ipsinavi.com/ipsivoca_Api.asp', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: `payload=${encodeURIComponent(verifyPayload)}`,
-        }).then(async res => {
-            const data = await res.json()
-            if (data.status !== 'active') {
-                console.warn(`[auth] 입시내비 비활성: nid=${nid}, status=${data.status}`)
+        let ipsiStatus = 'active'
+        let ipsiNsiteID: number | null = null
+        let ipsiScomment: string | null = null
+        try {
+            const ipsiRes = await fetch('https://m.ipsinavi.com/ipsivoca_Api.asp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `payload=${encodeURIComponent(verifyPayload)}`,
+            })
+            const ipsiData = await ipsiRes.json()
+            ipsiStatus = ipsiData.status || 'active'
+            ipsiNsiteID = ipsiData.NsiteID ? Number(ipsiData.NsiteID) : null
+            ipsiScomment = ipsiData.Scomment || null
+            console.log(`[auth] ${nid} 입시내비 검증: status=${ipsiStatus}, NsiteID=${ipsiNsiteID}, Scomment=${ipsiScomment} +${Date.now() - t0}ms`)
+        } catch (e) {
+            console.warn(`[auth] ${nid} 입시내비 API 호출 실패, 기본 active 처리`, e)
+        }
+
+        // ── ipsinavi_Login_info 회원 정보 관리 ──
+        const nidNum = parseInt(nid, 10)
+        const { data: existingLogin } = await adminClient
+            .from('ipsinavi_Login_info')
+            .select('id, UserName, NsiteID, Scomment, status')
+            .eq('UserNID', nidNum)
+            .single()
+
+        if (ipsiStatus !== 'active') {
+            // 탈퇴 회원: 기존 레코드가 있으면 status를 inactive로 업데이트
+            if (existingLogin) {
+                await adminClient
+                    .from('ipsinavi_Login_info')
+                    .update({ status: 'inactive' })
+                    .eq('UserNID', nidNum)
             }
-        }).catch(() => {})
+            return sendError('탈퇴한 회원입니다. 입시내비에 문의하세요.', IPSI_NAVI_URL, isJsonRequest)
+        }
+
+        let loginInfoId: number
+
+        if (!existingLogin) {
+            // 신규 사용자: INSERT (학원코드/학원명 포함)
+            const { data: inserted } = await adminClient.from('ipsinavi_Login_info').insert({
+                UserNID: nidNum,
+                UserName: displayName,
+                NsiteID: ipsiNsiteID,
+                Scomment: ipsiScomment,
+                status: 'active',
+                expires_at: new Date(Date.now() + 10 * 60 * 60 * 1000).toISOString(),
+            }).select('id').single()
+            loginInfoId = inserted!.id
+            console.log(`[auth] ${nid} ipsinavi_Login_info INSERT (id=${loginInfoId}) +${Date.now() - t0}ms`)
+        } else {
+            loginInfoId = existingLogin.id
+            // 기존 사용자: 이름/학원정보 변경 확인 + expires_at 갱신
+            const updates: Record<string, unknown> = {
+                expires_at: new Date(Date.now() + 10 * 60 * 60 * 1000).toISOString(),
+                status: 'active',
+            }
+            if (existingLogin.UserName !== displayName) {
+                updates.UserName = displayName
+                console.log(`[auth] ${nid} 이름 변경: ${existingLogin.UserName} → ${displayName}`)
+            }
+            if (ipsiNsiteID !== null && existingLogin.NsiteID !== ipsiNsiteID) {
+                updates.NsiteID = ipsiNsiteID
+            }
+            if (ipsiScomment !== null && existingLogin.Scomment !== ipsiScomment) {
+                updates.Scomment = ipsiScomment
+            }
+            await adminClient
+                .from('ipsinavi_Login_info')
+                .update(updates)
+                .eq('UserNID', nidNum)
+            console.log(`[auth] ${nid} ipsinavi_Login_info UPDATE (id=${loginInfoId}) +${Date.now() - t0}ms`)
+        }
 
         // ── generateLink 먼저 시도 (재방문 유저 fast path) ──
         let linkData = (await adminClient.auth.admin.generateLink({
@@ -175,17 +240,38 @@ export async function POST(request: NextRequest) {
             return sendError('세션 설정에 실패했습니다.', IPSI_NAVI_URL, isJsonRequest)
         }
 
-        // ── fire-and-forget: updateUser, profiles upsert ──
+        // ── supabase_uid 연결 + user_metadata에 login_info_id 저장 ──
+        await adminClient
+            .from('ipsinavi_Login_info')
+            .update({ supabase_uid: userId })
+            .eq('id', loginInfoId)
+
         adminClient.auth.admin.updateUserById(userId, {
-            user_metadata: { nid, sname: displayName, source: 'inputnavi' },
+            user_metadata: { nid, sname: displayName, source: 'inputnavi', login_info_id: loginInfoId },
         }).catch(() => {})
 
+        // profiles upsert (bigint id = loginInfoId, 학원정보 포함)
         Promise.resolve(
             adminClient.from('profiles').upsert(
-                { id: userId, name: displayName },
+                {
+                    id: loginInfoId,
+                    name: displayName,
+                    status: '0', // 0: 사용중
+                    NsiteID: ipsiNsiteID,
+                    Scomment: ipsiScomment,
+                },
                 { onConflict: 'id' }
             )
         ).catch(() => {})
+
+        // ── 로그인 정보 (클라이언트에서 쿠키 설정용) ──
+        const loginInfo = {
+            login_info_id: loginInfoId,
+            UserNID: nidNum,
+            UserName: displayName,
+            NsiteID: ipsiNsiteID,
+            Scomment: ipsiScomment,
+        }
 
         console.log(`[auth] ${nid} 완료 +${Date.now() - t0}ms`)
 
@@ -193,7 +279,7 @@ export async function POST(request: NextRequest) {
         const studyUrl = `/study?welcome=${encodeURIComponent(displayName)}`
 
         if (isJsonRequest) {
-            return NextResponse.json({ ok: true, redirectUrl: studyUrl })
+            return NextResponse.json({ ok: true, redirectUrl: studyUrl, loginInfo })
         }
 
         // HTML+JS redirect (Android/PC form POST 호환)
