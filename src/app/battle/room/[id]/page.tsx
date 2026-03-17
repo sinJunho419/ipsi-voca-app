@@ -25,6 +25,15 @@ interface RoomData {
     question_count: number
 }
 
+/** API 응답의 room 데이터를 숫자 타입으로 정규화 */
+function normalizeRoom(raw: RoomData): RoomData {
+    return {
+        ...raw,
+        host_id: Number(raw.host_id),
+        participant_ids: (raw.participant_ids || []).map(Number),
+    }
+}
+
 export default function RoomPage({ params }: { params: Promise<{ id: string }> }) {
     const { id: roomId } = use(params)
     const router = useRouter()
@@ -50,7 +59,20 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
     // 전적 기록
     const [records, setRecords] = useState<Record<number, { wins: number; losses: number }>>({})
 
-    // 1. 방 정보 로드 (로그인 불필요 — 게스트 ID 허용)
+    // 방 정보 다시 가져오기 (폴링 & broadcast용)
+    const fetchRoom = useCallback(async () => {
+        const res = await fetch('/api/battle', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'get', roomId, userId }),
+        })
+        const result = await res.json()
+        if (res.ok && result.room) {
+            setRoom(normalizeRoom(result.room))
+        }
+    }, [roomId, userId])
+
+    // 1. 방 정보 로드
     useEffect(() => {
         let isMounted = true
 
@@ -58,7 +80,6 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
             const { data: { user } } = await supabase.auth.getUser()
             let uid: number | null = (user?.user_metadata?.login_info_id as number) || null
 
-            // 비로그인 → 게스트 ID (음수로 구분)
             if (!uid) {
                 const stored = localStorage.getItem('battle_guest_id')
                 let guestId: number
@@ -73,7 +94,6 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
 
             if (isMounted) setUserId(uid)
 
-            // 서버 API로 방 조회 (admin client → RLS 우회)
             const res = await fetch('/api/battle', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -86,14 +106,8 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
                 return
             }
 
-            const roomData = {
-                ...result.room,
-                host_id: Number(result.room.host_id),
-                participant_ids: (result.room.participant_ids || []).map(Number),
-            }
-
             if (isMounted) {
-                setRoom(roomData)
+                setRoom(normalizeRoom(result.room))
                 setIsLoading(false)
             }
         }
@@ -102,27 +116,31 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
         return () => { isMounted = false }
     }, [roomId, supabase])
 
-    // 2. Realtime 구독 (Postgres Changes)
+    // 2. Realtime: postgres_changes + Broadcast 구독 + 폴링 (3초)
     useEffect(() => {
-        if (!roomId) return
+        if (!roomId || !userId) return
 
         const channel = supabase.channel(`room:${roomId}`)
             .on(
                 'postgres_changes',
                 { event: 'UPDATE', schema: 'public', table: 'battle_rooms', filter: `id=eq.${roomId}` },
-                (payload) => {
-                    const raw = payload.new as RoomData
-                    setRoom({
-                        ...raw,
-                        host_id: Number(raw.host_id),
-                        participant_ids: (raw.participant_ids || []).map(Number),
-                    })
-                }
+                (payload) => setRoom(normalizeRoom(payload.new as RoomData))
             )
+            .on('broadcast', { event: 'room_updated' }, () => {
+                fetchRoom()
+            })
             .subscribe()
 
-        return () => { supabase.removeChannel(channel) }
-    }, [roomId, supabase])
+        // 폴링: 3초마다 방 정보 갱신 (waiting 상태일 때만)
+        const pollInterval = setInterval(() => {
+            fetchRoom()
+        }, 3000)
+
+        return () => {
+            supabase.removeChannel(channel)
+            clearInterval(pollInterval)
+        }
+    }, [roomId, userId, supabase, fetchRoom])
 
     // 3. 참여자 이름 조회 (participant_ids 변경 시)
     const participantKey = (room?.participant_ids || []).join(',')
@@ -173,7 +191,7 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
         fetchRecords()
     }, [participantKey, supabase]) // eslint-disable-line react-hooks/exhaustive-deps
 
-    // 4. Presence 채널 - 방장 이탈 감지 & 자동 위임 (디바운스)
+    // 4. Presence 채널 - 방장 이탈 감지 & 자동 위임
     const hostTransferTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
     useEffect(() => {
@@ -186,21 +204,20 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
                 const state = presenceChannel.presenceState()
                 const onlineUserIds = Object.values(state)
                     .flat()
-                    .map((p: Record<string, unknown>) => p.user_id as number)
+                    .map((p: Record<string, unknown>) => Number(p.user_id))
 
                 const participants = room.participant_ids || []
-                const hostOffline = !onlineUserIds.includes(room.host_id)
-                const iAmParticipant = participants.includes(userId) && room.host_id !== userId
+                const hostOffline = !onlineUserIds.includes(Number(room.host_id))
+                const iAmParticipant = participants.map(Number).includes(Number(userId)) && Number(room.host_id) !== Number(userId)
 
-                // 방장이 오프라인이고, 내가 온라인 참여자 중 첫 번째이면 위임 받기
                 if (hostOffline && iAmParticipant) {
                     const nextHost = participants.find(
-                        id => id !== room.host_id && onlineUserIds.includes(id)
+                        id => Number(id) !== Number(room.host_id) && onlineUserIds.includes(Number(id))
                     )
-                    if (nextHost === userId) {
+                    if (Number(nextHost) === Number(userId)) {
                         if (hostTransferTimerRef.current) clearTimeout(hostTransferTimerRef.current)
                         hostTransferTimerRef.current = setTimeout(async () => {
-                            const others = participants.filter(id => id !== room.host_id)
+                            const others = participants.filter(id => Number(id) !== Number(room.host_id))
                             await supabase
                                 .from('battle_rooms')
                                 .update({ host_id: userId, participant_ids: others })
@@ -233,7 +250,7 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
 
     useEffect(() => {
         if (!room || room.status !== 'waiting') return
-        if (timerStartedRef.current) return // 이미 시작됨 → 재실행 방지
+        if (timerStartedRef.current) return
         timerStartedRef.current = true
 
         setWaitSeconds(60)
@@ -258,17 +275,14 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
 
         const count = room.participant_ids?.length || 0
 
-        // 방장만 액션 수행 (다른 참여자는 Realtime으로 감지)
-        if (room.host_id === userId) {
+        if (Number(room.host_id) === Number(userId)) {
             if (count >= 2) {
-                // 2명 이상: 자동 배틀 시작
                 fetch('/api/battle', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ action: 'start', roomId, hostId: userId }),
                 })
             } else {
-                // 방장 혼자: 방 폭파 → 로비로 이동
                 fetch('/api/battle', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -290,7 +304,7 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
         return () => clearTimeout(timer)
     }, [room?.status, room?.finished_at, router])
 
-    // 나가기 처리 (서버 API → RLS 우회)
+    // 나가기 처리
     const handleLeave = useCallback(async () => {
         if (!room || !userId) { router.push('/battle/lobby'); return }
 
@@ -329,7 +343,7 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
     const participantCount = room.participant_ids?.length || 0
     const tierInfo = room.level ? getTierInfo(room.level as Level) : null
 
-    // 방장: 배틀 시작 핸들러 (2명 이상일 때만)
+    // 방장: 배틀 시작 핸들러
     const handleStartBattle = async () => {
         if (!isHost || participantCount < 2) return
 
@@ -470,7 +484,7 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
                     </div>
                 </div>
 
-                {/* ── 하단 액션 ── */}
+                {/* ── 하단 액션: 방장은 시작 버튼, 참여자는 대기 메시지 ── */}
                 <div className={styles.actions}>
                     {isHost ? (
                         <button

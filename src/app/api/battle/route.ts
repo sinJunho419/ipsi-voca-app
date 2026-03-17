@@ -193,8 +193,8 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: '이미 게임이 진행 중입니다.' }, { status: 400 })
         }
 
-        const participants = room.participant_ids || []
-        if (participants.includes(authUserId)) {
+        const participants = (room.participant_ids || []).map(Number)
+        if (participants.includes(Number(authUserId))) {
             return NextResponse.json({ ok: true })
         }
 
@@ -225,7 +225,7 @@ export async function POST(request: NextRequest) {
             .eq('id', roomId)
             .single()
 
-        if (!room || room.host_id !== authUserId) {
+        if (!room || Number(room.host_id) !== Number(authUserId)) {
             return NextResponse.json({ error: '호스트만 시작할 수 있습니다.' }, { status: 403 })
         }
 
@@ -255,12 +255,12 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ ok: true })
         }
 
-        const remaining = (room.participant_ids || []).filter((id: number) => id !== authUserId)
+        const remaining = (room.participant_ids || []).filter((id: number) => Number(id) !== Number(authUserId))
 
         if (remaining.length === 0) {
             await admin.from('battle_rooms').delete().eq('id', roomId)
         } else {
-            const newHost = room.host_id === authUserId ? remaining[0] : room.host_id
+            const newHost = Number(room.host_id) === Number(authUserId) ? remaining[0] : room.host_id
             await admin
                 .from('battle_rooms')
                 .update({ participant_ids: remaining, host_id: newHost })

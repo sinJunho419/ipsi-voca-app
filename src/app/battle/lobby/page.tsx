@@ -372,6 +372,15 @@ function LobbyContent() {
                 return
             }
 
+            // 방에 입장 알림 broadcast
+            const roomChannel = supabase.channel(`room:${room.id}`)
+            roomChannel.subscribe(async (status) => {
+                if (status === 'SUBSCRIBED') {
+                    await roomChannel.send({ type: 'broadcast', event: 'room_updated', payload: {} })
+                    supabase.removeChannel(roomChannel)
+                }
+            })
+
             router.push(`/battle/room/${room.id}`)
         })
     }
