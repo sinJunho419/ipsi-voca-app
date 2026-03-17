@@ -293,7 +293,8 @@ export async function POST(request: NextRequest) {
 
     } catch (err) {
         console.error('Verify error:', err)
-        return sendError('비정상 접근입니다.', IPSI_NAVI_URL, isJsonRequest)
+        const errMsg = err instanceof Error ? err.message : String(err)
+        return sendError(`비정상 접근입니다. (${errMsg})`, IPSI_NAVI_URL, isJsonRequest)
     }
 }
 
