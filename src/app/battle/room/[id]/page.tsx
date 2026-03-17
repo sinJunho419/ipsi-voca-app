@@ -86,7 +86,11 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
                 return
             }
 
-            const roomData = result.room
+            const roomData = {
+                ...result.room,
+                host_id: Number(result.room.host_id),
+                participant_ids: (result.room.participant_ids || []).map(Number),
+            }
 
             if (isMounted) {
                 setRoom(roomData)
@@ -106,7 +110,14 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
             .on(
                 'postgres_changes',
                 { event: 'UPDATE', schema: 'public', table: 'battle_rooms', filter: `id=eq.${roomId}` },
-                (payload) => setRoom(payload.new as RoomData)
+                (payload) => {
+                    const raw = payload.new as RoomData
+                    setRoom({
+                        ...raw,
+                        host_id: Number(raw.host_id),
+                        participant_ids: (raw.participant_ids || []).map(Number),
+                    })
+                }
             )
             .subscribe()
 
@@ -314,7 +325,7 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
         )
     }
 
-    const isHost = room.host_id === userId
+    const isHost = Number(room.host_id) === Number(userId)
     const participantCount = room.participant_ids?.length || 0
     const tierInfo = room.level ? getTierInfo(room.level as Level) : null
 
@@ -424,8 +435,8 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
                     </p>
                     <div className={styles.participantList}>
                         {(room.participant_ids || []).map((pid) => {
-                            const isThisHost = pid === room.host_id
-                            const isMe = pid === userId
+                            const isThisHost = Number(pid) === Number(room.host_id)
+                            const isMe = Number(pid) === Number(userId)
                             return (
                                 <motion.div
                                     key={pid}

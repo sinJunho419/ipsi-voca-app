@@ -350,7 +350,7 @@ function LobbyContent() {
                 return
             }
 
-            if (room.participant_ids?.includes(odlId)) {
+            if (room.participant_ids?.map(Number).includes(odlId)) {
                 router.push(`/battle/room/${room.id}`)
                 return
             }

@@ -155,7 +155,7 @@ export default function BattleClient({ room, myId }: Props) {
     // Broadcast 채널 ref
     const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
 
-    const isOriginalHost = room.host_id === myId
+    const isOriginalHost = Number(room.host_id) === Number(myId)
     const [isActingHost, setIsActingHost] = useState(false)
     const isHost = isOriginalHost || isActingHost
     const myScore = scores[myId] || 0
