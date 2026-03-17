@@ -127,7 +127,7 @@ export async function POST(request: NextRequest) {
         // ── ipsinavi_Login_info 회원 정보 관리 ──
         const nidNum = parseInt(nid, 10)
         const { data: existingLogin } = await adminClient
-            .from('ipsinavi_Login_info')
+            .from('ipsinavi_login_info')
             .select('id, UserName, NsiteID, Scomment, status')
             .eq('UserNID', nidNum)
             .single()
@@ -136,7 +136,7 @@ export async function POST(request: NextRequest) {
             // 탈퇴 회원: 기존 레코드가 있으면 status를 inactive로 업데이트
             if (existingLogin) {
                 await adminClient
-                    .from('ipsinavi_Login_info')
+                    .from('ipsinavi_login_info')
                     .update({ status: 'inactive' })
                     .eq('UserNID', nidNum)
             }
@@ -147,7 +147,7 @@ export async function POST(request: NextRequest) {
 
         if (!existingLogin) {
             // 신규 사용자: INSERT (학원코드/학원명 포함)
-            const { data: inserted } = await adminClient.from('ipsinavi_Login_info').insert({
+            const { data: inserted } = await adminClient.from('ipsinavi_login_info').insert({
                 UserNID: nidNum,
                 UserName: displayName,
                 NsiteID: ipsiNsiteID,
@@ -175,7 +175,7 @@ export async function POST(request: NextRequest) {
                 updates.Scomment = ipsiScomment
             }
             await adminClient
-                .from('ipsinavi_Login_info')
+                .from('ipsinavi_login_info')
                 .update(updates)
                 .eq('UserNID', nidNum)
             console.log(`[auth] ${nid} ipsinavi_Login_info UPDATE (id=${loginInfoId}) +${Date.now() - t0}ms`)
@@ -242,7 +242,7 @@ export async function POST(request: NextRequest) {
 
         // ── supabase_uid 연결 + user_metadata에 login_info_id 저장 ──
         await adminClient
-            .from('ipsinavi_Login_info')
+            .from('ipsinavi_login_info')
             .update({ supabase_uid: userId })
             .eq('id', loginInfoId)
 
