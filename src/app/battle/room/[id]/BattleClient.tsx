@@ -51,12 +51,24 @@ interface LeaderEntry {
 
 function buildQuiz(words: Word[]): QuizQuestion[] {
     const allMeanings = words.map(w => w.mean_1)
+    const allWords = words.map(w => w.word)
 
     return words.map((word, i) => {
-        const correct = word.mean_1
-        const w1 = allMeanings[(i + 1) % allMeanings.length]
-        const w2 = allMeanings[(i + 2) % allMeanings.length]
-        const w3 = allMeanings[(i + 3) % allMeanings.length]
+        const hasSentence = word.example_sentence &&
+            word.example_sentence.toLowerCase().includes(word.word.toLowerCase())
+        const sentenceWithBlank = hasSentence
+            ? word.example_sentence!.replace(
+                new RegExp(word.word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), '____')
+            : null
+        const useSentence = !!sentenceWithBlank
+
+        // 문장 문제: 선지=영단어, 정답=영단어 / 일반 문제: 선지=뜻, 정답=뜻
+        const pool = useSentence ? allWords : allMeanings
+        const correct = useSentence ? word.word : word.mean_1
+
+        const w1 = pool[(i + 1) % pool.length]
+        const w2 = pool[(i + 2) % pool.length]
+        const w3 = pool[(i + 3) % pool.length]
 
         let wrongs = Array.from(new Set([w1, w2, w3])).filter(m => m !== correct)
         let fallbackIdx = 0
@@ -69,15 +81,8 @@ function buildQuiz(words: Word[]): QuizQuestion[] {
             return (sumA % 5) - (sumB % 5)
         })
 
-        const hasSentence = word.example_sentence &&
-            word.example_sentence.toLowerCase().includes(word.word.toLowerCase())
-        const sentenceWithBlank = hasSentence
-            ? word.example_sentence!.replace(
-                new RegExp(word.word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), '____')
-            : null
-
         const isIdiom = word.type === 'idiom'
-        return { word, options, correct, useSentence: !!sentenceWithBlank, sentenceWithBlank, isIdiom }
+        return { word, options, correct, useSentence, sentenceWithBlank, isIdiom }
     })
 }
 
@@ -829,7 +834,7 @@ export default function BattleClient({ room, myId }: Props) {
                     >
                         {current.useSentence && current.sentenceWithBlank ? (
                             <>
-                                <p className={styles.sentenceLabel}>Q. 빈칸에 들어갈 단어의 뜻은?</p>
+                                <p className={styles.sentenceLabel}>Q. 빈칸에 들어갈 단어는?</p>
                                 <div className={styles.sentenceBox}>
                                     <p className={styles.sentenceText}>
                                         &ldquo;{renderSentenceWithBlank(current.sentenceWithBlank)}&rdquo;
