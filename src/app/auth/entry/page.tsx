@@ -14,8 +14,8 @@ function EntryForm() {
             return
         }
 
-        // payload를 sessionStorage에 저장하고 URL에서 제거
-        sessionStorage.setItem('auth_payload', payload)
+        // payload를 localStorage에 저장하고 URL에서 제거
+        localStorage.setItem('auth_payload', payload)
         window.location.replace('/auth/loading')
     }, [params])
 

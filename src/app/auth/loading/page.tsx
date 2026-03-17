@@ -7,9 +7,9 @@ function LoadingContent() {
     const [showUI, setShowUI] = useState(false)
 
     useEffect(() => {
-        // sessionStorage에서 payload 꺼내고 즉시 삭제
-        const payload = sessionStorage.getItem('auth_payload')
-        sessionStorage.removeItem('auth_payload')
+        // localStorage에서 payload 꺼내고 즉시 삭제
+        const payload = localStorage.getItem('auth_payload')
+        localStorage.removeItem('auth_payload')
 
         if (!payload) {
             alert('잘못된 접근입니다.')
