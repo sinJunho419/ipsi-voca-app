@@ -585,7 +585,7 @@ export default function BattleClient({ room, myId }: Props) {
 
         if (option === '__timeout__') {
             afkCountRef.current += 1
-            if (afkCountRef.current >= 2) { setQuizState('afk_lost'); return }
+            if (afkCountRef.current >= 5) { setQuizState('afk_lost'); return }
         } else {
             afkCountRef.current = 0
         }
@@ -816,7 +816,7 @@ export default function BattleClient({ room, myId }: Props) {
                 <div className={styles.timerBar}>
                     <div
                         className={`${styles.timerFill} ${timerProgress <= 25 ? styles.timerBlink : ''}`}
-                        style={{ width: `${timerProgress}%`, backgroundColor: timerColor, transition: 'none' }}
+                        style={{ width: `${timerProgress}%`, backgroundColor: timerColor, transition: 'none', marginLeft: 'auto' }}
                     />
                 </div>
                 <div className={styles.timerLabel}>
