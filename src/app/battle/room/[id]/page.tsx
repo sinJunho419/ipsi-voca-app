@@ -278,26 +278,16 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
         }
     }, [room?.status])
 
-    // 타이머 만료 시: 2명 이상 → 자동 시작 / 방장 혼자 → 방 폭파
+    // 타이머 만료 시: 자동 시작 (방장이 수행)
     useEffect(() => {
         if (waitSeconds > 0 || !room || room.status !== 'waiting') return
 
-        const count = room.participant_ids?.length || 0
-
         if (Number(room.host_id) === Number(userId)) {
-            if (count >= 2) {
-                fetch('/api/battle', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'start', roomId, hostId: userId }),
-                })
-            } else {
-                fetch('/api/battle', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'leave', roomId, userId }),
-                }).then(() => router.push('/battle/lobby'))
-            }
+            fetch('/api/battle', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'start', roomId, hostId: userId }),
+            })
         }
     }, [waitSeconds, room, userId, roomId, router])
 
@@ -354,7 +344,7 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
 
     // 방장: 배틀 시작 핸들러
     const handleStartBattle = async () => {
-        if (!isHost || participantCount < 2) return
+        if (!isHost) return
 
         if (waitTimerRef.current) clearInterval(waitTimerRef.current)
 
@@ -499,11 +489,8 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
                         <button
                             className={styles.btnPrimary}
                             onClick={handleStartBattle}
-                            disabled={participantCount < 2}
                         >
-                            {participantCount >= 2
-                                ? `🚀 배틀 시작 (${participantCount}명)`
-                                : '⏳ 상대를 기다리는 중...'}
+                            {`🚀 배틀 시작 (${participantCount}명)`}
                         </button>
                     ) : (
                         <div className={styles.waitingMsg}>
