@@ -59,7 +59,7 @@ export default function UserProfile({ level, refreshKey }: Props) {
             const { data, error } = await supabase
                 .from('user_progress')
                 .select('success_count, is_cleared, has_medal')
-                .eq('user_id', user.id)
+                .eq('user_id', user.user_metadata?.login_info_id)
                 .eq('level', level)
 
             if (error || !data || cancelled) return

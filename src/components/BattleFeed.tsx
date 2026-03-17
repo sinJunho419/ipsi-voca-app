@@ -55,7 +55,7 @@ function getFeedMessage(feed: FeedItem): React.ReactNode {
 export default function BattleFeed() {
     const supabase = createClient()
     const [feeds, setFeeds] = useState<FeedItem[]>([])
-    const [academyId, setAcademyId] = useState<string | null>(null)
+    const [academyId, setAcademyId] = useState<number | null>(null)
     const mountedRef = useRef(true)
 
     useEffect(() => {
@@ -67,10 +67,12 @@ export default function BattleFeed() {
         async function init() {
             const { data: { user } } = await supabase.auth.getUser()
             if (!user) return
+            const loginInfoId = user.user_metadata?.login_info_id as number
+            if (!loginInfoId) return
             const { data: profile } = await supabase
-                .from('profiles').select('academy_id').eq('id', user.id).single()
-            if (profile?.academy_id && mountedRef.current) {
-                setAcademyId(profile.academy_id)
+                .from('profiles').select('NsiteID').eq('id', loginInfoId).single()
+            if (profile?.NsiteID && mountedRef.current) {
+                setAcademyId(profile.NsiteID)
             }
         }
         init()
@@ -108,7 +110,7 @@ export default function BattleFeed() {
                     event: 'INSERT',
                     schema: 'public',
                     table: 'battle_history',
-                    filter: `academy_id=eq.${academyId}`
+                    filter: `NsiteID=eq.${academyId}`
                 },
                 async (pgPayload) => {
                     if (!mountedRef.current) return
@@ -121,8 +123,8 @@ export default function BattleFeed() {
                     })
 
                     const scores = entry.scores as Record<string, number>
-                    const participantIds = entry.participants_ids as string[]
-                    const winnerId = entry.winner_id as string
+                    const participantIds = entry.participants_ids as number[]
+                    const winnerId = entry.winner_id as number
                     if (!winnerId) return
 
                     const { data: winnerProfile } = await supabase

@@ -21,7 +21,7 @@ async function ensureSchema() {
     try {
         // @ts-expect-error — supabase-js v2.43+ supports .sql tagged template
         await admin.sql`
-            ALTER TABLE public.battle_rooms ADD COLUMN IF NOT EXISTS participant_ids uuid[] DEFAULT '{}';
+            ALTER TABLE public.battle_rooms ADD COLUMN IF NOT EXISTS participant_ids bigint[] DEFAULT '{}';
             ALTER TABLE public.battle_rooms ADD COLUMN IF NOT EXISTS max_players integer DEFAULT 50;
             ALTER TABLE public.battle_rooms ADD COLUMN IF NOT EXISTS question_ids integer[];
             ALTER TABLE public.battle_rooms ADD COLUMN IF NOT EXISTS finished_at timestamptz;
@@ -35,12 +35,13 @@ async function ensureSchema() {
     }
 }
 
-/** 세션에서 인증된 유저 ID를 가져옴 */
-async function getAuthUserId(): Promise<string | null> {
+/** 세션에서 인증된 유저 ID(login_info_id)를 가져옴 */
+async function getAuthUserId(): Promise<number | null> {
     try {
         const supabase = await createServerClient()
         const { data: { user } } = await supabase.auth.getUser()
-        return user?.id ?? null
+        const loginInfoId = user?.user_metadata?.login_info_id
+        return typeof loginInfoId === 'number' ? loginInfoId : null
     } catch {
         return null
     }
@@ -53,7 +54,8 @@ export async function POST(request: NextRequest) {
     const { action } = body
 
     // 인증: 로그인 유저 우선, 없으면 클라이언트가 보낸 hostId(게스트 ID) 사용
-    const authUserId = await getAuthUserId() || body.hostId || body.userId
+    const rawId = await getAuthUserId() ?? (body.hostId != null ? Number(body.hostId) : null) ?? (body.userId != null ? Number(body.userId) : null)
+    const authUserId: number | null = typeof rawId === 'number' && !isNaN(rawId) ? rawId : null
     if (!authUserId) {
         return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 })
     }
@@ -202,7 +204,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ ok: true })
         }
 
-        const remaining = (room.participant_ids || []).filter((id: string) => id !== authUserId)
+        const remaining = (room.participant_ids || []).filter((id: number) => id !== authUserId)
 
         if (remaining.length === 0) {
             await admin.from('battle_rooms').delete().eq('id', roomId)

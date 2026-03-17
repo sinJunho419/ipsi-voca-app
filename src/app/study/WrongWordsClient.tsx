@@ -60,7 +60,8 @@ interface Props {
 export default function WrongWordsClient({ onExit }: Props) {
     const supabase = createClient()
     const router = useRouter()
-    const [userId, setUserId] = useState<string | null>(null)
+    const [userId, setUserId] = useState<number | null>(null)
+    const [isLocalUser, setIsLocalUser] = useState(false)
     const [wrongWords, setWrongWords] = useState<WrongWordEntry[]>([])
     const [masteredWords, setMasteredWords] = useState<WrongWordEntry[]>([])
     const [isLoading, setIsLoading] = useState(true)
@@ -88,11 +89,12 @@ export default function WrongWordsClient({ onExit }: Props) {
         async function init() {
             const { data: { user } } = await supabase.auth.getUser()
             if (user) {
-                setUserId(user.id)
-                await fetchWrongWords(user.id)
+                const loginInfoId = user.user_metadata?.login_info_id as number
+                setUserId(loginInfoId)
+                await fetchWrongWords(loginInfoId)
             } else {
                 // 비로그인: localStorage에서 오답 불러오기
-                setUserId('local')
+                setIsLocalUser(true)
                 await fetchLocalWrongWords()
             }
         }
@@ -158,7 +160,7 @@ export default function WrongWordsClient({ onExit }: Props) {
         } catch { return 'Learning' }
     }
 
-    async function fetchWrongWords(uid: string) {
+    async function fetchWrongWords(uid: number) {
         setIsLoading(true)
 
         // Learning 단어
@@ -273,11 +275,11 @@ export default function WrongWordsClient({ onExit }: Props) {
     }
 
     async function handleSelect(option: string) {
-        if (selected !== null || !userId) return
+        if (selected !== null || (!userId && !isLocalUser)) return
         setSelected(option)
 
         const current = quiz[index]
-        const isLocal = userId === 'local'
+        const isLocal = isLocalUser
 
         if (option === current.correct) {
             setScore(s => s + 1)
@@ -338,12 +340,12 @@ export default function WrongWordsClient({ onExit }: Props) {
 
     function backToList() {
         setMode('list')
-        if (userId === 'local') fetchLocalWrongWords()
+        if (isLocalUser) fetchLocalWrongWords()
         else if (userId) fetchWrongWords(userId)
     }
 
     async function createRevengeBattle() {
-        if (!userId || userId === 'local' || wrongWords.length < 4 || creatingBattle) return
+        if (!userId || isLocalUser || wrongWords.length < 4 || creatingBattle) return
         setCreatingBattle(true)
 
         const roomCode = Math.random().toString(36).substring(2, 8).toUpperCase()
@@ -384,7 +386,7 @@ export default function WrongWordsClient({ onExit }: Props) {
         )
     }
 
-    if (!userId) {
+    if (!userId && !isLocalUser) {
         return (
             <motion.div className={`${styles.glass} ${styles.empty}`}
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }}>

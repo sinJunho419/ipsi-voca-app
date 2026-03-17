@@ -10,8 +10,8 @@ export interface TierInfo {
 }
 
 const TIER_MAP: Record<Level, TierInfo> = {
-    elem_3: { label: 'Rookie',       labelKo: '루키',         alias: '초3', color: '#4ade80', bg: 'rgba(74,222,128,0.15)',   cssVar: '--tier-rookie' },
-    elem_4: { label: 'Starter',      labelKo: '스타터',       alias: '초4', color: '#2dd4bf', bg: 'rgba(45,212,191,0.15)',   cssVar: '--tier-starter' },
+    elem_3: { label: 'Starter',      labelKo: '스타터',       alias: '초3', color: '#4ade80', bg: 'rgba(74,222,128,0.15)',   cssVar: '--tier-starter' },
+    elem_4: { label: 'Rookie',       labelKo: '루키',         alias: '초4', color: '#2dd4bf', bg: 'rgba(45,212,191,0.15)',   cssVar: '--tier-rookie' },
     elem_5: { label: 'Bronze',       labelKo: '브론즈',       alias: '초5', color: '#d4915c', bg: 'rgba(212,145,92,0.15)',   cssVar: '--tier-bronze' },
     elem_6: { label: 'Silver',       labelKo: '실버',         alias: '초6', color: '#94a3b8', bg: 'rgba(148,163,184,0.15)',  cssVar: '--tier-silver' },
     mid_1:  { label: 'Gold',         labelKo: '골드',         alias: '중1', color: '#facc15', bg: 'rgba(250,204,21,0.15)',   cssVar: '--tier-gold' },
@@ -38,8 +38,8 @@ export function getTierColor(level: Level): string {
 
 /** 전체 레벨 목록 (셀렉트 옵션용) - 티어 이름 포함 */
 export const TIER_LEVELS: { value: Level; label: string }[] = [
-    { value: 'elem_3', label: 'Rookie' },
-    { value: 'elem_4', label: 'Starter' },
+    { value: 'elem_3', label: 'Starter' },
+    { value: 'elem_4', label: 'Rookie' },
     { value: 'elem_5', label: 'Bronze' },
     { value: 'elem_6', label: 'Silver' },
     { value: 'mid_1',  label: 'Gold' },

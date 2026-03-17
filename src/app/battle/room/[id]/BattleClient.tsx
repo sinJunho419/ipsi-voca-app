@@ -13,8 +13,8 @@ import confetti from 'canvas-confetti'
 interface RoomData {
     id: string
     room_code: string
-    host_id: string
-    participant_ids: string[]
+    host_id: number
+    participant_ids: number[]
     max_players: number
     status: 'waiting' | 'playing' | 'finished'
     level: string
@@ -27,7 +27,7 @@ interface RoomData {
 
 interface Props {
     room: RoomData
-    myId: string
+    myId: number
 }
 
 type QuizState = 'playing' | 'wrong' | 'finished' | 'countdown' | 'afk_lost'
@@ -42,7 +42,7 @@ interface QuizQuestion {
 }
 
 interface LeaderEntry {
-    id: string
+    id: number
     score: number
     name: string
     isMe: boolean
@@ -127,9 +127,9 @@ export default function BattleClient({ room, myId }: Props) {
     const [countdownNum, setCountdownNum] = useState<number | string>(3)
 
     // N인 점수 추적
-    const [scores, setScores] = useState<Record<string, number>>({})
-    const scoresRef = useRef<Record<string, number>>({})
-    const [participantNames, setParticipantNames] = useState<Record<string, string>>({})
+    const [scores, setScores] = useState<Record<number, number>>({})
+    const scoresRef = useRef<Record<number, number>>({})
+    const [participantNames, setParticipantNames] = useState<Record<number, string>>({})
 
     // 타이머
     const [timerProgress, setTimerProgress] = useState(100)
@@ -140,14 +140,14 @@ export default function BattleClient({ room, myId }: Props) {
 
     // 오답 단어 추적 (내 오답 + 다른 참여자 오답)
     const wrongWordsRef = useRef<number[]>([])
-    const allWrongWordsRef = useRef<Record<string, number[]>>({})
+    const allWrongWordsRef = useRef<Record<number, number[]>>({})
 
     // 리벤지 모드: 졸업 단어 추적
     const [graduatedWords, setGraduatedWords] = useState<string[]>([])
 
     // 이탈한 유저 추적
-    const [leftPlayers, setLeftPlayers] = useState<Set<string>>(new Set())
-    const leftPlayersRef = useRef<Set<string>>(new Set())
+    const [leftPlayers, setLeftPlayers] = useState<Set<number>>(new Set())
+    const leftPlayersRef = useRef<Set<number>>(new Set())
 
     // 승패 기록 중복 방지
     const historySavedRef = useRef(false)
@@ -172,7 +172,7 @@ export default function BattleClient({ room, myId }: Props) {
         async function fetchNames() {
             const { data } = await supabase.from('profiles').select('id, name').in('id', ids)
             if (data) {
-                const names: Record<string, string> = {}
+                const names: Record<number, string> = {}
                 data.forEach(p => { names[p.id] = p.name || '익명' })
                 setParticipantNames(names)
             }
@@ -229,7 +229,7 @@ export default function BattleClient({ room, myId }: Props) {
             }
 
             // 초기 점수: 모든 참여자 0점
-            const initial: Record<string, number> = {}
+            const initial: Record<number, number> = {}
             ;(room.participant_ids || []).forEach(id => { initial[id] = 0 })
             setScores(initial)
 
@@ -313,7 +313,7 @@ export default function BattleClient({ room, myId }: Props) {
                 const state = presenceChannel.presenceState()
                 const onlineIds = Object.values(state)
                     .flat()
-                    .map((p: Record<string, unknown>) => p.user_id as string)
+                    .map((p: Record<string, unknown>) => p.user_id as number)
 
                 const hostOffline = !onlineIds.includes(room.host_id)
                 if (!hostOffline) return
@@ -425,27 +425,28 @@ export default function BattleClient({ room, myId }: Props) {
         left.forEach(id => { finalScores[id] = 0 })
 
         // 승자 결정 (이탈자 제외)
-        const activePlayers = Object.entries(finalScores).filter(([id]) => !left.has(id))
+        const activePlayers = Object.entries(finalScores).filter(([id]) => !left.has(Number(id)))
         const maxScore = activePlayers.length > 0
             ? Math.max(...activePlayers.map(([, s]) => s), 0) : 0
         const topPlayers = activePlayers.filter(([, s]) => s === maxScore)
-        let winnerId: string | null = null
+        let winnerId: number | null = null
 
         if (isAfkLoss) {
-            const others = activePlayers.filter(([id]) => id !== myId)
-            winnerId = others.sort(([, a], [, b]) => b - a)[0]?.[0] || null
+            const others = activePlayers.filter(([id]) => Number(id) !== myId)
+            const topOther = others.sort(([, a], [, b]) => b - a)[0]?.[0]
+            winnerId = topOther != null ? Number(topOther) : null
         } else if (topPlayers.length === 1) {
-            winnerId = topPlayers[0][0]
+            winnerId = Number(topPlayers[0][0])
         }
 
         // 전체 프로필 조회 (한 번에)
         const { data: profiles } = await supabase
-            .from('profiles').select('id, name, academy_id').in('id', participantIds)
+            .from('profiles').select('id, name, NsiteID').in('id', participantIds)
         const profileMap = new Map(profiles?.map(p => [p.id, p]) || [])
-        const academyId = profileMap.get(myId)?.academy_id || null
+        const academyId: number | null = profileMap.get(myId)?.NsiteID || null
 
         // 전원 오답 합산 (리벤지 모드는 이미 개별 추적하므로 null)
-        let wrongWordsData: Record<string, number[]> | null = null
+        let wrongWordsData: Record<number, number[]> | null = null
         if (!isRevenge) {
             wrongWordsData = { ...allWrongWordsRef.current }
             if (wrongWordsRef.current.length > 0) {
@@ -459,7 +460,7 @@ export default function BattleClient({ room, myId }: Props) {
             scores: finalScores,
             winner_id: winnerId,
             wrong_words: wrongWordsData,
-            academy_id: academyId,
+            NsiteID: academyId,
         }).select('id').single()
 
         // 학원 피드
@@ -467,7 +468,7 @@ export default function BattleClient({ room, myId }: Props) {
             const sortedEntries = Object.entries(finalScores).sort(([, a], [, b]) => b - a)
             const winnerName = profileMap.get(winnerId)?.name || '익명'
             const runnerUpId = sortedEntries[1]?.[0]
-            const runnerUpName = runnerUpId ? (profileMap.get(runnerUpId)?.name || '익명') : '상대'
+            const runnerUpName = runnerUpId ? (profileMap.get(Number(runnerUpId))?.name || '익명') : '상대'
 
             supabase.channel(`academy_feed:${academyId}`).send({
                 type: 'broadcast',
@@ -556,12 +557,15 @@ export default function BattleClient({ room, myId }: Props) {
 
     // 리더보드 계산
     const leaderboard: LeaderEntry[] = Object.entries(scores)
-        .map(([id, score]) => ({
-            id, score,
-            name: participantNames[id] || '???',
-            isMe: id === myId,
-            isLeft: leftPlayers.has(id),
-        }))
+        .map(([idStr, score]) => {
+            const id = Number(idStr)
+            return {
+                id, score,
+                name: participantNames[id] || '???',
+                isMe: id === myId,
+                isLeft: leftPlayers.has(id),
+            }
+        })
         .sort((a, b) => {
             // 이탈자는 항상 하단
             if (a.isLeft !== b.isLeft) return a.isLeft ? 1 : -1

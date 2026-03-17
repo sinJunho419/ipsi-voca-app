@@ -45,7 +45,7 @@ export default function WrongNoteClient({ onCloseAction }: { onCloseAction: () =
         const { data, error } = await supabase
             .from('wrong_answers')
             .select('*, word:words(*)')
-            .eq('user_id', user.id)
+            .eq('user_id', user.user_metadata?.login_info_id)
             .order('last_wrong_at', { ascending: false })
 
         if (error) {

@@ -16,16 +16,19 @@ function generateRoomCode() {
 }
 
 /** 로그인 유저 ID 또는 게스트 ID (로그인 불필요) */
-async function getUserId(supabase: ReturnType<typeof createClient>) {
+async function getUserId(supabase: ReturnType<typeof createClient>): Promise<number> {
     const { data: { user } } = await supabase.auth.getUser()
-    if (user) return user.id
-    // 비로그인 → 브라우저별 고유 게스트 ID 생성/재사용
+    if (user) {
+        const loginInfoId = user.user_metadata?.login_info_id as number
+        if (loginInfoId) return loginInfoId
+    }
+    // 비로그인 → 브라우저별 고유 게스트 ID (음수 난수)
     let guestId = localStorage.getItem('battle_guest_id')
     if (!guestId) {
-        guestId = crypto.randomUUID()
+        guestId = String(-Math.floor(Math.random() * 1000000000))
         localStorage.setItem('battle_guest_id', guestId)
     }
-    return guestId
+    return Number(guestId)
 }
 
 interface BattleConfig {

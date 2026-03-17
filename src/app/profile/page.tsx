@@ -7,7 +7,7 @@ import styles from '../study/study.module.css' // Reuse study styles for glassmo
 import { useRouter } from 'next/navigation'
 
 interface Rival {
-    userId: string
+    userId: number
     name: string
     wins: number
     losses: number
@@ -19,7 +19,7 @@ export default function ProfilePage() {
     const supabase = createClient()
     const router = useRouter()
     const [loading, setLoading] = useState(true)
-    const [myProfile, setMyProfile] = useState<{ name: string, academy_id: string } | null>(null)
+    const [myProfile, setMyProfile] = useState<{ name: string, NsiteID: number | null } | null>(null)
     const [rivals, setRivals] = useState<Rival[]>([])
 
     useEffect(() => {
@@ -35,25 +35,32 @@ export default function ProfilePage() {
                     return
                 }
 
+                const loginInfoId = user.user_metadata?.login_info_id as number
+                if (!loginInfoId) {
+                    alert('로그인 정보가 올바르지 않습니다.')
+                    router.push('/study')
+                    return
+                }
+
                 // 1. 프로필 로드
-                const { data: profile } = await supabase.from('profiles').select('name, academy_id').eq('id', user.id).single()
+                const { data: profile } = await supabase.from('profiles').select('name, NsiteID').eq('id', loginInfoId).single()
                 if (isMounted) setMyProfile(profile)
 
                 // 2. 전적 로드 및 라이벌 분석
                 const { data: history } = await supabase
                     .from('battle_history')
                     .select('*')
-                    .contains('participants_ids', [user.id])
+                    .contains('participants_ids', [loginInfoId])
                     .order('created_at', { ascending: false })
 
                 if (history) {
-                    const rivalMap = new Map<string, { wins: number, losses: number }>()
+                    const rivalMap = new Map<number, { wins: number, losses: number }>()
 
                     history.forEach(h => {
-                        const opponentId = h.participants_ids.find((id: string) => id !== user.id)
+                        const opponentId = h.participants_ids.find((id: number) => id !== loginInfoId)
                         if (opponentId) {
                             const stats = rivalMap.get(opponentId) || { wins: 0, losses: 0 }
-                            if (h.winner_id === user.id) stats.wins++
+                            if (h.winner_id === loginInfoId) stats.wins++
                             else if (h.winner_id === opponentId) stats.losses++
                             rivalMap.set(opponentId, stats)
                         }

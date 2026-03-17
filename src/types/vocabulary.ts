@@ -25,9 +25,9 @@ export type RoomStatus = 'waiting' | 'playing' | 'finished'
 export interface BattleRoom {
     id: string               // uuid
     room_code: string        // 6자리 입장 코드
-    host_id: string          // 방장 user_id
-    guest_id: string | null  // (레거시) 1v1 참가자
-    participant_ids: string[] // N인 참여자 목록 (방장 포함)
+    host_id: number          // 방장 login_info_id
+    guest_id: number | null  // (레거시) 1v1 참가자
+    participant_ids: number[] // N인 참여자 목록 (방장 포함)
     max_players: number       // 최대 인원 (기본 50)
     level: Level
     set_no: number

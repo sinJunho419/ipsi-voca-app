@@ -108,6 +108,11 @@ function SetupContent() {
                 setFetchError('로그인이 필요합니다. 먼저 로그인해 주세요.')
                 return
             }
+            const loginInfoId = user.user_metadata?.login_info_id as number
+            if (!loginInfoId) {
+                setFetchError('로그인 정보가 올바르지 않습니다.')
+                return
+            }
 
             // 선택된 단어/숙어 세트에서 데이터 가져오기
             const queries = []
@@ -168,7 +173,7 @@ function SetupContent() {
                 .from('battle_rooms')
                 .insert({
                     room_code: roomCode,
-                    host_id: user.id,
+                    host_id: loginInfoId,
                     level,
                     set_no: selectedWordSets[0] ?? selectedIdiomSets[0] ?? 1,
                     status: 'waiting',
@@ -187,7 +192,7 @@ function SetupContent() {
             // 방장을 첫 참가자로 등록
             await supabase
                 .from('battle_participants')
-                .insert({ room_id: room.id, user_id: user.id, is_ready: true })
+                .insert({ room_id: room.id, user_id: loginInfoId, is_ready: true })
 
             // 대기실로 바로 이동
             router.push(`/battle/room/${room.id}`)

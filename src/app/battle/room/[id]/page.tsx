@@ -13,8 +13,8 @@ import BattleClient from './BattleClient'
 interface RoomData {
     id: string
     room_code: string
-    host_id: string
-    participant_ids: string[]
+    host_id: number
+    participant_ids: number[]
     max_players: number
     status: 'waiting' | 'playing' | 'finished'
     level: string
@@ -31,7 +31,7 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
     const supabase = createClient()
 
     const [room, setRoom] = useState<RoomData | null>(null)
-    const [userId, setUserId] = useState<string | null>(null)
+    const [userId, setUserId] = useState<number | null>(null)
     const [isLoading, setIsLoading] = useState(true)
     const [errorMsg, setErrorMsg] = useState('')
 
@@ -45,10 +45,10 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
     const [copyMsg, setCopyMsg] = useState('')
 
     // 참여자 이름
-    const [participantNames, setParticipantNames] = useState<Record<string, string>>({})
+    const [participantNames, setParticipantNames] = useState<Record<number, string>>({})
 
     // 전적 기록
-    const [records, setRecords] = useState<Record<string, { wins: number; losses: number }>>({})
+    const [records, setRecords] = useState<Record<number, { wins: number; losses: number }>>({})
 
     // 1. 방 정보 로드 (로그인 불필요 — 게스트 ID 허용)
     useEffect(() => {
@@ -56,14 +56,17 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
 
         async function init() {
             const { data: { user } } = await supabase.auth.getUser()
-            let uid = user?.id || null
+            let uid: number | null = (user?.user_metadata?.login_info_id as number) || null
 
-            // 비로그인 → 게스트 ID 사용
+            // 비로그인 → 게스트 ID (음수로 구분)
             if (!uid) {
-                let guestId = localStorage.getItem('battle_guest_id')
-                if (!guestId) {
-                    guestId = crypto.randomUUID()
-                    localStorage.setItem('battle_guest_id', guestId)
+                const stored = localStorage.getItem('battle_guest_id')
+                let guestId: number
+                if (stored) {
+                    guestId = Number(stored)
+                } else {
+                    guestId = -Math.floor(Math.random() * 1_000_000_000)
+                    localStorage.setItem('battle_guest_id', String(guestId))
                 }
                 uid = guestId
             }
@@ -122,7 +125,7 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
                 .select('id, name')
                 .in('id', ids!)
             if (data) {
-                const names: Record<string, string> = {}
+                const names: Record<number, string> = {}
                 data.forEach(p => { names[p.id] = p.name || '익명' })
                 setParticipantNames(names)
             }
@@ -143,11 +146,11 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
 
             if (!histories) return
 
-            const rec: Record<string, { wins: number; losses: number }> = {}
+            const rec: Record<number, { wins: number; losses: number }> = {}
             ids!.forEach(id => { rec[id] = { wins: 0, losses: 0 } })
 
-            histories.forEach((h: { winner_id: string | null; participants_ids: string[] }) => {
-                (h.participants_ids || []).forEach((pid: string) => {
+            histories.forEach((h: { winner_id: number | null; participants_ids: number[] }) => {
+                (h.participants_ids || []).forEach((pid: number) => {
                     if (!rec[pid]) return
                     if (h.winner_id === pid) rec[pid].wins++
                     else if (h.winner_id) rec[pid].losses++
@@ -172,7 +175,7 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
                 const state = presenceChannel.presenceState()
                 const onlineUserIds = Object.values(state)
                     .flat()
-                    .map((p: Record<string, unknown>) => p.user_id as string)
+                    .map((p: Record<string, unknown>) => p.user_id as number)
 
                 const participants = room.participant_ids || []
                 const hostOffline = !onlineUserIds.includes(room.host_id)
