@@ -21,12 +21,63 @@ async function ensureSchema() {
     try {
         // @ts-expect-error — supabase-js v2.43+ supports .sql tagged template
         await admin.sql`
+            -- battle_rooms: uuid → bigint 마이그레이션 (조건부)
+            DO $$ BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_schema='public' AND table_name='battle_rooms'
+                      AND column_name='host_id' AND udt_name='uuid'
+                ) THEN
+                    ALTER TABLE public.battle_rooms
+                        ALTER COLUMN host_id TYPE bigint USING NULL,
+                        ALTER COLUMN guest_id TYPE bigint USING NULL;
+                END IF;
+
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_schema='public' AND table_name='battle_rooms'
+                      AND column_name='participant_ids' AND udt_name='_uuid'
+                ) THEN
+                    ALTER TABLE public.battle_rooms
+                        ALTER COLUMN participant_ids TYPE bigint[] USING '{}';
+                END IF;
+
+                -- battle_history: uuid → bigint
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_schema='public' AND table_name='battle_history'
+                      AND column_name='winner_id' AND udt_name='uuid'
+                ) THEN
+                    ALTER TABLE public.battle_history
+                        ALTER COLUMN winner_id TYPE bigint USING NULL;
+                END IF;
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_schema='public' AND table_name='battle_history'
+                      AND column_name='participants_ids' AND udt_name='_uuid'
+                ) THEN
+                    ALTER TABLE public.battle_history
+                        ALTER COLUMN participants_ids TYPE bigint[] USING '{}';
+                END IF;
+
+                -- battle_participants: uuid → bigint
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_schema='public' AND table_name='battle_participants'
+                      AND column_name='user_id' AND udt_name='uuid'
+                ) THEN
+                    ALTER TABLE public.battle_participants
+                        ALTER COLUMN user_id TYPE bigint USING NULL;
+                END IF;
+            END $$;
+
             ALTER TABLE public.battle_rooms ADD COLUMN IF NOT EXISTS participant_ids bigint[] DEFAULT '{}';
             ALTER TABLE public.battle_rooms ADD COLUMN IF NOT EXISTS max_players integer DEFAULT 50;
             ALTER TABLE public.battle_rooms ADD COLUMN IF NOT EXISTS question_ids integer[];
             ALTER TABLE public.battle_rooms ADD COLUMN IF NOT EXISTS finished_at timestamptz;
             ALTER TABLE public.battle_rooms ADD COLUMN IF NOT EXISTS mode text NOT NULL DEFAULT 'normal';
             ALTER TABLE public.battle_rooms ADD COLUMN IF NOT EXISTS question_count integer NOT NULL DEFAULT 10;
+
             NOTIFY pgrst, 'reload schema';
         `
         schemaMigrated = true

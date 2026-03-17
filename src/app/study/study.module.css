@@ -440,6 +440,7 @@
   cursor: pointer;
   transition: background 0.15s, transform 0.1s;
   line-height: 1;
+  margin-top: auto;
 }
 
 .speakBtn:hover {
