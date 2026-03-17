@@ -337,12 +337,12 @@ export default function BattleClient({ room, myId }: Props) {
         return () => { supabase.removeChannel(presenceChannel) }
     }, [room.id, room.host_id, room.participant_ids, myId, isOriginalHost, supabase])
 
-    // 자동 발음
+    // 자동 발음 (문장 문제가 아닐 때만 — 문장 문제에서는 정답 힌트가 됨)
     useEffect(() => {
         if (quizState !== 'playing') return
-        const word = quiz[index]?.word.word
-        if (!word) return
-        const timer = setTimeout(() => speak(word), 500)
+        const q = quiz[index]
+        if (!q || (q.useSentence && q.sentenceWithBlank)) return
+        const timer = setTimeout(() => speak(q.word.word), 500)
         return () => clearTimeout(timer)
     }, [index, quiz, quizState])
 
@@ -835,9 +835,6 @@ export default function BattleClient({ room, myId }: Props) {
                                         &ldquo;{renderSentenceWithBlank(current.sentenceWithBlank)}&rdquo;
                                     </p>
                                 </div>
-                                <h2 className={styles.questionWord} style={{ fontSize: '1.6rem', marginTop: '0.25rem' }}>
-                                    {current.word.word}
-                                </h2>
                             </>
                         ) : (
                             <>
