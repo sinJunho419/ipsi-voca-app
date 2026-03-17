@@ -386,12 +386,9 @@ export default function BattleClient({ room, myId }: Props) {
     const quizRef = useRef<QuizQuestion[]>([])
     useEffect(() => { quizRef.current = quiz }, [quiz])
 
-    // 문제 변경 시 타이머 시작 (index가 바뀔 때만)
-    const prevIndexRef = useRef(-1)
+    // 문제 변경 시 타이머 시작
     useEffect(() => {
         if (quizState !== 'playing' || quizRef.current.length === 0) return
-        if (prevIndexRef.current === index) return
-        prevIndexRef.current = index
         const current = quizRef.current[index]
         startTimer(current ? getTimerSec(current.word, current.useSentence) : 4)
         return () => stopTimer()
