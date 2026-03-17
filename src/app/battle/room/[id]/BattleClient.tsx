@@ -376,15 +376,11 @@ export default function BattleClient({ room, myId }: Props) {
         if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
     }, [])
 
-    // 타임아웃 처리
+    // 타임아웃 처리 → handleSelect로 통합
     useEffect(() => {
         if (timerProgress > 0 || quizState !== 'playing') return
-        stopTimer()
-        afkCountRef.current += 1
-        if (afkCountRef.current >= 2) { setQuizState('afk_lost'); return }
-        setSelected('__timeout__')
-        setQuizState('wrong')
-    }, [timerProgress, quizState, stopTimer])
+        handleSelect('__timeout__')
+    }, [timerProgress, quizState]) // eslint-disable-line react-hooks/exhaustive-deps
 
     // quiz를 ref로도 보관 (타이머 effect에서 참조하되 의존성에 넣지 않음)
     const quizRef = useRef<QuizQuestion[]>([])
@@ -589,7 +585,13 @@ export default function BattleClient({ room, myId }: Props) {
         if (selected !== null || quizState !== 'playing') return
         setSelected(option)
         stopTimer()
-        afkCountRef.current = 0
+
+        if (option === '__timeout__') {
+            afkCountRef.current += 1
+            if (afkCountRef.current >= 2) { setQuizState('afk_lost'); return }
+        } else {
+            afkCountRef.current = 0
+        }
 
         if (option === current.correct) {
             const nextScore = myScore + 1
@@ -622,12 +624,13 @@ export default function BattleClient({ room, myId }: Props) {
             }
 
             setQuizState('wrong')
-        }
-    }
 
-    function handleNext() {
-        if (index + 1 >= total) setQuizState('finished')
-        else { setIndex(i => i + 1); setSelected(null); setQuizState('playing') }
+            // 1.2초 후 자동으로 다음 문제
+            setTimeout(() => {
+                if (index + 1 >= total) setQuizState('finished')
+                else { setIndex(i => i + 1); setSelected(null); setQuizState('playing') }
+            }, 1200)
+        }
     }
 
     // ── AFK 패배 화면 ──
@@ -888,17 +891,15 @@ export default function BattleClient({ room, myId }: Props) {
                     })}
                 </div>
 
-                {/* 오답 피드백 */}
+                {/* 오답 피드백 (자동 넘김) */}
                 <AnimatePresence>
                     {quizState === 'wrong' && (
                         <motion.div className={styles.wrongFeedback}
                             initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
                             <p>
                                 {selected === '__timeout__' ? '⏰ 시간 초과! ' : ''}
-                                정답은 <strong>{current.correct}</strong> 입니다.
+                                정답은 <strong>{current.correct}</strong>
                             </p>
-                            <button className={styles.btnSecondary} style={{ marginTop: '0.75rem' }}
-                                onClick={handleNext}>다음 문제 →</button>
                         </motion.div>
                     )}
                 </AnimatePresence>
