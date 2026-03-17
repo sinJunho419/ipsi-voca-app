@@ -28,6 +28,7 @@ interface RoomData {
 interface Props {
     room: RoomData
     myId: number
+    initialNames?: Record<number, string>
 }
 
 type QuizState = 'playing' | 'wrong' | 'finished' | 'countdown' | 'afk_lost'
@@ -149,7 +150,7 @@ function clearState(roomId: string) {
     try { sessionStorage.removeItem(storeKey(roomId)) } catch {}
 }
 
-export default function BattleClient({ room, myId }: Props) {
+export default function BattleClient({ room, myId, initialNames }: Props) {
     const supabase = createClient()
 
     // 저장된 상태 복원
@@ -167,7 +168,7 @@ export default function BattleClient({ room, myId }: Props) {
     // N인 점수 추적
     const [scores, setScores] = useState<Record<number, number>>(saved?.scores || {})
     const scoresRef = useRef<Record<number, number>>(saved?.scores || {})
-    const [participantNames, setParticipantNames] = useState<Record<number, string>>({})
+    const [participantNames, setParticipantNames] = useState<Record<number, string>>(initialNames || {})
 
     // 타이머
     const [timerProgress, setTimerProgress] = useState(100)
@@ -222,20 +223,26 @@ export default function BattleClient({ room, myId }: Props) {
         })
     }, [index, scores, quizState, quiz, room.id])
 
-    // 참여자 이름 조회
+    // 참여자 이름 조회 (initialNames가 비어있을 때만, API 경유)
     useEffect(() => {
         const ids = room.participant_ids || []
         if (ids.length === 0) return
+        if (initialNames && ids.every(id => initialNames[id])) return
+
         async function fetchNames() {
-            const { data } = await supabase.from('profiles').select('id, name').in('id', ids)
-            if (data) {
-                const names: Record<number, string> = {}
-                data.forEach(p => { names[Number(p.id)] = p.name || '익명' })
-                setParticipantNames(names)
+            const res = await fetch('/api/battle', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'names', ids, userId: myId }),
+                cache: 'no-store',
+            })
+            const result = await res.json()
+            if (result.names) {
+                setParticipantNames(prev => ({ ...prev, ...result.names }))
             }
         }
         fetchNames()
-    }, [room.participant_ids, supabase])
+    }, [room.participant_ids, myId]) // eslint-disable-line react-hooks/exhaustive-deps
 
     const isRevenge = room.mode === 'revenge'
 

@@ -151,25 +151,26 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
         return () => { clearInterval(pollInterval) }
     }, [roomId, room?.status, fetchRoom])
 
-    // 3. 참여자 이름 조회 (participant_ids 변경 시)
+    // 3. 참여자 이름 조회 (participant_ids 변경 시, API 경유로 RLS 우회)
     const participantKey = (room?.participant_ids || []).join(',')
     useEffect(() => {
         const ids = room?.participant_ids
         if (!ids?.length) return
 
         async function fetchNames() {
-            const { data } = await supabase
-                .from('profiles')
-                .select('id, name')
-                .in('id', ids!)
-            if (data) {
-                const names: Record<number, string> = {}
-                data.forEach(p => { names[p.id] = p.name || '익명' })
-                setParticipantNames(names)
+            const res = await fetch('/api/battle', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'names', ids, userId }),
+                cache: 'no-store',
+            })
+            const result = await res.json()
+            if (result.names) {
+                setParticipantNames(result.names)
             }
         }
         fetchNames()
-    }, [participantKey, supabase]) // eslint-disable-line react-hooks/exhaustive-deps
+    }, [participantKey, userId]) // eslint-disable-line react-hooks/exhaustive-deps
 
     // 3.5. 전적 기록 조회
     useEffect(() => {
@@ -364,7 +365,7 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
     if (room.status === 'playing' || room.status === 'finished') {
         return (
             <div className={styles.page}>
-                <BattleClient room={room} myId={userId} />
+                <BattleClient room={room} myId={userId} initialNames={participantNames} />
             </div>
         )
     }

@@ -270,5 +270,19 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ ok: true })
     }
 
+    // ── 참여자 이름 조회 (RLS 우회) ──
+    if (action === 'names') {
+        const { ids } = body
+        if (!ids || !Array.isArray(ids)) {
+            return NextResponse.json({ error: 'ids required' }, { status: 400 })
+        }
+        const { data } = await admin.from('profiles').select('id, name').in('id', ids)
+        const names: Record<number, string> = {}
+        if (data) {
+            data.forEach((p: { id: number; name: string | null }) => { names[Number(p.id)] = p.name || '익명' })
+        }
+        return NextResponse.json({ names })
+    }
+
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
 }
