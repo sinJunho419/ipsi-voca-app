@@ -95,6 +95,50 @@
   50% { opacity: 1; }
 }
 
+/* ── 주간 탐색 ── */
+.weekNav {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 1.25rem;
+}
+
+.weekNavBtn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(99, 102, 241, 0.1);
+  backdrop-filter: blur(10px);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s, opacity 0.2s;
+}
+
+.weekNavBtn:hover:not(:disabled) {
+  background: rgba(99, 102, 241, 0.2);
+}
+
+.weekNavBtn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.weekNavLabel {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #e2e8f0;
+  letter-spacing: -0.01em;
+}
+
 /* ── 캐러셀 ── */
 .carousel {
   position: relative;
@@ -143,16 +187,16 @@
 /* ── 요약 스탯 그리드 ── */
 .statGrid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
 }
 
 .statBox {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 1rem 0.5rem;
+  gap: 3px;
+  padding: 0.75rem 0.25rem;
   background: rgba(15, 23, 42, 0.5);
   border-radius: 14px;
   border: 1px solid #1e293b;
@@ -250,8 +294,8 @@
 /* ── 성과 행 ── */
 .achievementRow {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
 }
 
 .achieveBox {

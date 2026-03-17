@@ -131,6 +131,7 @@ export default function StudyClient({ initialWords, initialMaxSet }: Props) {
     }
     const [currentIndex, setCurrentIndex] = useState(0)
     const [isFlipped, setIsFlipped] = useState(false)
+    const studyLoggedRef = useRef(false)
     const [isPending, startTransition] = useTransition()
 
     useEffect(() => {
@@ -156,6 +157,29 @@ export default function StudyClient({ initialWords, initialMaxSet }: Props) {
         }
         prevFlippedRef.current = isFlipped
     }, [isFlipped]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    // 학습 완료 기록 (마지막 카드 도달 시)
+    useEffect(() => {
+        if (!level || setNo === null || words.length === 0) return
+        if (currentIndex !== words.length - 1) return
+        if (studyLoggedRef.current) return
+        studyLoggedRef.current = true
+
+        ;(async () => {
+            const { data: { user } } = await supabase.auth.getUser()
+            if (!user) return
+            const loginInfoId = user.user_metadata?.login_info_id
+            if (!loginInfoId) return
+            await supabase.from('activity_log').insert({
+                user_id: loginInfoId,
+                activity_type: 'study_complete',
+                level,
+                set_no: setNo,
+                set_type: setType,
+                total: words.length,
+            })
+        })()
+    }, [currentIndex, words.length, level, setNo, setType]) // eslint-disable-line react-hooks/exhaustive-deps
 
     async function changeLevel(newLevel: Level | null) {
         if (!newLevel) return
@@ -207,6 +231,7 @@ export default function StudyClient({ initialWords, initialMaxSet }: Props) {
             prevIndexRef.current = -1
             setCurrentIndex(0)
             setIsFlipped(false)
+            studyLoggedRef.current = false
         })
     }, [level]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -502,7 +527,7 @@ export default function StudyClient({ initialWords, initialMaxSet }: Props) {
                             </motion.div>
                         ) : (
                             <motion.div key="quiz-content" {...fadeUp} transition={{ ...spring } as Transition}>
-                                <QuizClient key={`${level}-${setNo}`} words={words} onExit={() => setTab('study')} onFinish={handleQuizFinish} />
+                                <QuizClient key={`${level}-${setNo}`} words={words} level={level!} setNo={setNo!} setType={setType} onExit={() => setTab('study')} onFinish={handleQuizFinish} />
                             </motion.div>
                         )
                     ) : tab === 'wrong' ? (
@@ -516,6 +541,9 @@ export default function StudyClient({ initialWords, initialMaxSet }: Props) {
                             <MasterChallengeClient
                                 key={`master-${level}-${setNo}`}
                                 words={words}
+                                level={level!}
+                                setNo={setNo!}
+                                setType={setType}
                                 onSuccess={handleMasterSuccess}
                                 onExit={() => setTab('study')}
                             />

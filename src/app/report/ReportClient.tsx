@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
 import {
-    BarChart3, Trophy, Swords, BookCheck, Flame,
+    BarChart3, Trophy, Swords, BookCheck, BookOpen, ClipboardCheck,
     ChevronLeft, ChevronRight, ArrowLeft, Users, Target
 } from 'lucide-react'
 import {
@@ -15,13 +15,14 @@ import {
 import styles from './report.module.css'
 
 interface ReportData {
+    studyCount: number
+    quizCount: number
     totalBattles: number
     wins: number
     winRate: number
-    masteredCount: number
     masteredWordCount: number
     masteredIdiomCount: number
-    topRivalId: string | null
+    topRivalId: number | null
     topRivalName: string | null
     topRivalCount: number
     dailyActivity: { day: string; count: number }[]
@@ -32,10 +33,37 @@ interface AcademyAvg {
     avgBattles: number
     avgWinRate: number
     avgMastered: number
+    avgStudy: number
+    avgQuiz: number
 }
 
 const DAY_LABELS = ['월', '화', '수', '목', '금', '토', '일']
 const DAY_COLORS = ['#6366f1', '#818cf8', '#a5b4fc', '#6366f1', '#818cf8', '#f472b6', '#f472b6']
+const WEEKDAY_NAMES = ['일', '월', '화', '수', '목', '금', '토']
+
+function getWeekStart(offset: number): Date {
+    const now = new Date()
+    const dayOfWeek = now.getDay()
+    const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
+    const thisMonday = new Date(now)
+    thisMonday.setDate(now.getDate() + mondayOffset)
+    thisMonday.setHours(0, 0, 0, 0)
+    const weekStart = new Date(thisMonday)
+    weekStart.setDate(thisMonday.getDate() + (offset * 7))
+    return weekStart
+}
+
+function formatWeekRange(weekStart: Date): string {
+    const weekEnd = new Date(weekStart)
+    weekEnd.setDate(weekStart.getDate() + 6)
+    const m1 = weekStart.getMonth() + 1
+    const d1 = weekStart.getDate()
+    const w1 = WEEKDAY_NAMES[weekStart.getDay()]
+    const m2 = weekEnd.getMonth() + 1
+    const d2 = weekEnd.getDate()
+    const w2 = WEEKDAY_NAMES[weekEnd.getDay()]
+    return `${m1}/${d1}(${w1}) ~ ${m2}/${d2}(${w2})`
+}
 
 const cardVariants = {
     enter: (dir: number) => ({ x: dir > 0 ? 300 : -300, opacity: 0, rotateY: dir > 0 ? 15 : -15 }),
@@ -48,67 +76,78 @@ export default function ReportClient() {
     const router = useRouter()
 
     const [isLoading, setIsLoading] = useState(true)
-    const [userId, setUserId] = useState<string | null>(null)
+    const [userId, setUserId] = useState<number | null>(null)
     const [report, setReport] = useState<ReportData | null>(null)
     const [academyAvg, setAcademyAvg] = useState<AcademyAvg | null>(null)
     const [userName, setUserName] = useState('')
+    const [weekOffset, setWeekOffset] = useState(0)
 
     // 카드 캐러셀
     const [cardIndex, setCardIndex] = useState(0)
     const [direction, setDirection] = useState(0)
 
+    const weekStart = getWeekStart(weekOffset)
+    const weekEnd = new Date(weekStart)
+    weekEnd.setDate(weekStart.getDate() + 7)
+
     useEffect(() => {
         async function load() {
+            setIsLoading(true)
             const { data: { user } } = await supabase.auth.getUser()
             if (!user) { setIsLoading(false); return }
-            setUserId(user.id)
+            const loginInfoId = user.user_metadata?.login_info_id as number
+            if (!loginInfoId) { setIsLoading(false); return }
+            setUserId(loginInfoId)
 
             // 프로필
             const { data: profile } = await supabase
-                .from('profiles').select('name, academy_id').eq('id', user.id).single()
+                .from('profiles').select('name, NsiteID').eq('id', loginInfoId).single()
             setUserName(profile?.name || '학생')
 
-            // 이번 주 시작 (월요일)
-            const now = new Date()
-            const dayOfWeek = now.getDay()
-            const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
-            const weekStart = new Date(now)
-            weekStart.setDate(now.getDate() + mondayOffset)
-            weekStart.setHours(0, 0, 0, 0)
+            const ws = weekStart.toISOString()
+            const we = weekEnd.toISOString()
 
-            const weekEnd = new Date(weekStart)
-            weekEnd.setDate(weekStart.getDate() + 7)
-
-            // 배틀 기록 조회 (이번 주)
+            // 배틀 기록 (이번 주)
             const { data: battles } = await supabase
                 .from('battle_history')
                 .select('winner_id, participants_ids, created_at')
-                .gte('created_at', weekStart.toISOString())
-                .lt('created_at', weekEnd.toISOString())
+                .gte('created_at', ws)
+                .lt('created_at', we)
 
             const myBattles = (battles || []).filter(b =>
-                (b.participants_ids || []).includes(user.id)
+                (b.participants_ids || []).includes(loginInfoId)
             )
 
             const totalBattles = myBattles.length
-            const wins = myBattles.filter(b => b.winner_id === user.id).length
+            const wins = myBattles.filter(b => b.winner_id === loginInfoId).length
             const winRate = totalBattles > 0 ? Math.round((wins / totalBattles) * 100) : 0
 
-            // 졸업 단어 수 (전체)
-            const { count: masteredCount } = await supabase
-                .from('wrong_answers')
+            // 학습/테스트 횟수 (이번 주)
+            const { count: studyCount } = await supabase
+                .from('activity_log')
                 .select('*', { count: 'exact', head: true })
-                .eq('user_id', user.id)
-                .eq('status', 'Mastered')
+                .eq('user_id', loginInfoId)
+                .eq('activity_type', 'study_complete')
+                .gte('created_at', ws)
+                .lt('created_at', we)
 
-            // 졸업 단어 중 숙어 수 (word_id → words.type = 'idiom')
+            const { count: quizCount } = await supabase
+                .from('activity_log')
+                .select('*', { count: 'exact', head: true })
+                .eq('user_id', loginInfoId)
+                .eq('activity_type', 'quiz_complete')
+                .gte('created_at', ws)
+                .lt('created_at', we)
+
+            // 정복 단어/숙어 (누적)
             const { data: masteredRows } = await supabase
                 .from('wrong_answers')
                 .select('word_id')
-                .eq('user_id', user.id)
+                .eq('user_id', loginInfoId)
                 .eq('status', 'Mastered')
 
             let masteredIdiomCount = 0
+            const masteredTotal = masteredRows?.length || 0
             if (masteredRows && masteredRows.length > 0) {
                 const masteredIds = masteredRows.map(r => r.word_id)
                 const { count: idiomCount } = await supabase
@@ -118,17 +157,17 @@ export default function ReportClient() {
                     .eq('type', 'idiom')
                 masteredIdiomCount = idiomCount || 0
             }
-            const masteredWordCount = (masteredCount || 0) - masteredIdiomCount
+            const masteredWordCount = masteredTotal - masteredIdiomCount
 
             // 최다 대전 상대
-            const rivalCounts: Record<string, number> = {}
+            const rivalCounts: Record<number, number> = {}
             myBattles.forEach(b => {
-                (b.participants_ids || []).forEach((pid: string) => {
-                    if (pid !== user.id) rivalCounts[pid] = (rivalCounts[pid] || 0) + 1
+                (b.participants_ids || []).forEach((pid: number) => {
+                    if (pid !== loginInfoId) rivalCounts[pid] = (rivalCounts[pid] || 0) + 1
                 })
             })
             const rivalEntries = Object.entries(rivalCounts).sort(([, a], [, b]) => b - a)
-            const topRivalId = rivalEntries[0]?.[0] || null
+            const topRivalId = rivalEntries[0]?.[0] ? Number(rivalEntries[0][0]) : null
             const topRivalCount = rivalEntries[0]?.[1] || 0
 
             let topRivalName: string | null = null
@@ -138,21 +177,34 @@ export default function ReportClient() {
                 topRivalName = rivalProfile?.name || '익명'
             }
 
-            // 요일별 활동
+            // 요일별 활동 (배틀 + 학습 + 테스트)
             const dayCounts: number[] = [0, 0, 0, 0, 0, 0, 0]
             myBattles.forEach(b => {
                 const d = new Date(b.created_at)
-                const dow = d.getDay() // 0=Sun
-                const isoIdx = dow === 0 ? 6 : dow - 1 // 0=Mon
-                dayCounts[isoIdx]++
+                const dow = d.getDay()
+                dayCounts[dow === 0 ? 6 : dow - 1]++
+            })
+
+            const { data: activityRows } = await supabase
+                .from('activity_log')
+                .select('created_at')
+                .eq('user_id', loginInfoId)
+                .gte('created_at', ws)
+                .lt('created_at', we)
+
+            ;(activityRows || []).forEach(r => {
+                const d = new Date(r.created_at)
+                const dow = d.getDay()
+                dayCounts[dow === 0 ? 6 : dow - 1]++
             })
 
             const dailyActivity = DAY_LABELS.map((day, i) => ({ day, count: dayCounts[i] }))
-            const totalActivity = dayCounts.reduce((a, b) => a + b, 0)
+            const totalActivity = (studyCount || 0) + (quizCount || 0) + totalBattles
 
             setReport({
+                studyCount: studyCount || 0,
+                quizCount: quizCount || 0,
                 totalBattles, wins, winRate,
-                masteredCount: masteredCount || 0,
                 masteredWordCount,
                 masteredIdiomCount,
                 topRivalId, topRivalName, topRivalCount,
@@ -160,10 +212,9 @@ export default function ReportClient() {
             })
 
             // 학원 평균 비교
-            if (profile?.academy_id) {
-                // 같은 학원 유저 목록
+            if (profile?.NsiteID) {
                 const { data: academyUsers } = await supabase
-                    .from('profiles').select('id').eq('academy_id', profile.academy_id)
+                    .from('profiles').select('id').eq('NsiteID', profile.NsiteID)
 
                 if (academyUsers && academyUsers.length > 1) {
                     const academyIds = academyUsers.map(u => u.id)
@@ -172,13 +223,32 @@ export default function ReportClient() {
                     let totalBattlesSum = 0
                     let totalWinsSum = 0
                     let totalMasteredSum = 0
+                    let totalStudySum = 0
+                    let totalQuizSum = 0
                     let userCount = 0
 
                     for (const uid of academyIds) {
                         const userBattles = allBattles.filter(b =>
                             (b.participants_ids || []).includes(uid)
                         )
-                        if (userBattles.length === 0 && uid !== user.id) continue
+
+                        const { count: uStudy } = await supabase
+                            .from('activity_log')
+                            .select('*', { count: 'exact', head: true })
+                            .eq('user_id', uid)
+                            .eq('activity_type', 'study_complete')
+                            .gte('created_at', ws)
+                            .lt('created_at', we)
+
+                        const { count: uQuiz } = await supabase
+                            .from('activity_log')
+                            .select('*', { count: 'exact', head: true })
+                            .eq('user_id', uid)
+                            .eq('activity_type', 'quiz_complete')
+                            .gte('created_at', ws)
+                            .lt('created_at', we)
+
+                        if (userBattles.length === 0 && (uStudy || 0) === 0 && (uQuiz || 0) === 0 && uid !== loginInfoId) continue
 
                         const uWins = userBattles.filter(b => b.winner_id === uid).length
 
@@ -193,6 +263,8 @@ export default function ReportClient() {
                             ? Math.round((uWins / userBattles.length) * 100)
                             : 0
                         totalMasteredSum += (uMastered || 0)
+                        totalStudySum += (uStudy || 0)
+                        totalQuizSum += (uQuiz || 0)
                         userCount++
                     }
 
@@ -201,6 +273,8 @@ export default function ReportClient() {
                             avgBattles: Math.round(totalBattlesSum / userCount),
                             avgWinRate: Math.round(totalWinsSum / userCount),
                             avgMastered: Math.round(totalMasteredSum / userCount),
+                            avgStudy: Math.round(totalStudySum / userCount),
+                            avgQuiz: Math.round(totalQuizSum / userCount),
                         })
                     }
                 }
@@ -209,7 +283,7 @@ export default function ReportClient() {
             setIsLoading(false)
         }
         load()
-    }, []) // eslint-disable-line react-hooks/exhaustive-deps
+    }, [weekOffset]) // eslint-disable-line react-hooks/exhaustive-deps
 
     function navigate(dir: number) {
         setDirection(dir)
@@ -239,21 +313,22 @@ export default function ReportClient() {
         )
     }
 
-    // 학원 비교 문구
+    // 학원 비교 문구 (총 활동 기준)
     function getComparisonMsg() {
         if (!academyAvg || !report) return null
 
-        const battleDiff = report.totalBattles - academyAvg.avgBattles
-        const battlePct = academyAvg.avgBattles > 0
-            ? Math.round(((report.totalBattles - academyAvg.avgBattles) / academyAvg.avgBattles) * 100)
+        const myTotal = report.totalActivity
+        const avgTotal = (academyAvg.avgStudy + academyAvg.avgQuiz + academyAvg.avgBattles)
+        const pct = avgTotal > 0
+            ? Math.round(((myTotal - avgTotal) / avgTotal) * 100)
             : 0
 
-        if (battlePct > 0) {
-            return { text: `우리 학원 평균보다 ${battlePct}% 더 공부했어요!`, emoji: '🔥', positive: true }
-        } else if (battlePct === 0) {
+        if (pct > 0) {
+            return { text: `우리 학원 평균보다 ${pct}% 더 공부했어요!`, emoji: '🔥', positive: true }
+        } else if (pct === 0) {
             return { text: '학원 평균과 동일한 학습량이에요!', emoji: '👍', positive: true }
         } else {
-            return { text: `학원 평균보다 ${Math.abs(battlePct)}% 부족해요. 더 분발해봐요!`, emoji: '💪', positive: false }
+            return { text: `학원 평균보다 ${Math.abs(pct)}% 부족해요. 더 분발해봐요!`, emoji: '💪', positive: false }
         }
     }
 
@@ -269,9 +344,19 @@ export default function ReportClient() {
             <p className={styles.greeting}>{userName}님의 주간 리포트</p>
             <div className={styles.statGrid}>
                 <div className={styles.statBox}>
-                    <Swords size={20} className={styles.statIcon} />
+                    <BookOpen size={20} className={styles.statIcon} />
+                    <span className={styles.statValue}>{report.studyCount}</span>
+                    <span className={styles.statLabel}>학습</span>
+                </div>
+                <div className={styles.statBox}>
+                    <ClipboardCheck size={20} className={styles.statIconGold} />
+                    <span className={styles.statValue}>{report.quizCount}</span>
+                    <span className={styles.statLabel}>테스트</span>
+                </div>
+                <div className={styles.statBox}>
+                    <Swords size={20} className={styles.statIconOrange} />
                     <span className={styles.statValue}>{report.totalBattles}</span>
-                    <span className={styles.statLabel}>배틀 수</span>
+                    <span className={styles.statLabel}>배틀</span>
                 </div>
                 <div className={styles.statBox}>
                     <Trophy size={20} className={styles.statIconGold} />
@@ -280,31 +365,21 @@ export default function ReportClient() {
                 </div>
                 <div className={styles.statBox}>
                     <BookCheck size={20} className={styles.statIconGreen} />
-                    <span className={styles.statValue}>{report.masteredCount}</span>
-                    <span className={styles.statLabel}>졸업 (누적)</span>
+                    <span className={styles.statValue}>{report.masteredWordCount}</span>
+                    <span className={styles.statLabel}>정복 단어</span>
                 </div>
                 <div className={styles.statBox}>
-                    <Flame size={20} className={styles.statIconOrange} />
-                    <span className={styles.statValue}>{report.totalActivity}</span>
-                    <span className={styles.statLabel}>총 활동</span>
+                    <span style={{ fontSize: '1.2rem' }}>🔗</span>
+                    <span className={styles.statValue}>{report.masteredIdiomCount}</span>
+                    <span className={styles.statLabel}>정복 숙어</span>
                 </div>
             </div>
-            {/* 숙어 정복 하이라이트 */}
-            {report.masteredIdiomCount > 0 && (
-                <div className={styles.idiomHighlight}>
-                    <span className={styles.idiomHighlightIcon}>🔗</span>
-                    <div>
-                        <p className={styles.idiomHighlightTitle}>정복한 숙어: {report.masteredIdiomCount}개</p>
-                        <p className={styles.idiomHighlightSub}>단어 {report.masteredWordCount}개 + 숙어 {report.masteredIdiomCount}개 졸업!</p>
-                    </div>
-                </div>
-            )}
         </div>,
 
         // 1: 요일별 활동 차트
         <div key="chart" className={styles.cardInner}>
             <h2 className={styles.cardTitle}>
-                <BarChart3 size={22} /> 요일별 학습량
+                <BarChart3 size={22} /> 요일별 활동
             </h2>
             <div className={styles.chartWrap}>
                 <ResponsiveContainer width="100%" height={220}>
@@ -331,7 +406,7 @@ export default function ReportClient() {
                                 fontSize: '0.85rem',
                                 fontWeight: 600,
                             }}
-                            formatter={(value) => [`${value}회`, '배틀']}
+                            formatter={(value) => [`${value}회`, '활동']}
                         />
                         <Bar dataKey="count" radius={[8, 8, 0, 0]} maxBarSize={40}>
                             {report.dailyActivity.map((_, i) => (
@@ -396,7 +471,7 @@ export default function ReportClient() {
             </div>
         </div>,
 
-        // 3: 라이벌 & 졸업
+        // 3: 라이벌 & 성과
         <div key="rival" className={styles.cardInner}>
             <h2 className={styles.cardTitle}>
                 <Target size={22} /> 라이벌 & 성과
@@ -427,7 +502,7 @@ export default function ReportClient() {
                 <div className={styles.achieveBox}>
                     <BookCheck size={28} style={{ color: '#10b981' }} />
                     <span className={styles.achieveValue}>{report.masteredWordCount}개</span>
-                    <span className={styles.achieveLabel}>졸업 단어</span>
+                    <span className={styles.achieveLabel}>정복 단어</span>
                 </div>
                 <div className={styles.achieveBox}>
                     <span style={{ fontSize: '1.6rem' }}>🔗</span>
@@ -449,9 +524,10 @@ export default function ReportClient() {
                         <p className={styles.compText}>{comparison.text}</p>
                     </div>
                     <div className={styles.compGrid}>
-                        <CompareBar label="배틀 수" mine={report.totalBattles} avg={academyAvg!.avgBattles} />
-                        <CompareBar label="승률" mine={report.winRate} avg={academyAvg!.avgWinRate} suffix="%" />
-                        <CompareBar label="졸업 단어" mine={report.masteredCount} avg={academyAvg!.avgMastered} />
+                        <CompareBar label="학습" mine={report.studyCount} avg={academyAvg!.avgStudy} />
+                        <CompareBar label="테스트" mine={report.quizCount} avg={academyAvg!.avgQuiz} />
+                        <CompareBar label="배틀" mine={report.totalBattles} avg={academyAvg!.avgBattles} />
+                        <CompareBar label="정복 단어" mine={report.masteredWordCount + report.masteredIdiomCount} avg={academyAvg!.avgMastered} />
                     </div>
                 </>
             ) : (
@@ -477,8 +553,26 @@ export default function ReportClient() {
                 <button className={styles.backBtn} onClick={() => router.push('/study')}>
                     <ArrowLeft size={16} /> 돌아가기
                 </button>
-                <h1 className={styles.pageTitle}>📊 주간 리포트</h1>
+                <h1 className={styles.pageTitle}>주간 리포트</h1>
             </motion.div>
+
+            {/* 주간 탐색 */}
+            <div className={styles.weekNav}>
+                <button
+                    className={styles.weekNavBtn}
+                    onClick={() => setWeekOffset(w => w - 1)}
+                >
+                    <ChevronLeft size={18} />
+                </button>
+                <span className={styles.weekNavLabel}>{formatWeekRange(weekStart)}</span>
+                <button
+                    className={styles.weekNavBtn}
+                    onClick={() => setWeekOffset(w => w + 1)}
+                    disabled={weekOffset >= 0}
+                >
+                    <ChevronRight size={18} />
+                </button>
+            </div>
 
             {/* 카드 캐러셀 */}
             <div className={styles.carousel}>

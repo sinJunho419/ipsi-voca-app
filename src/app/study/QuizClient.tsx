@@ -53,9 +53,16 @@ function getTimerSec(word: Word): number {
 
 const spring: Transition = { type: 'spring', stiffness: 420, damping: 30 }
 
-interface Props { words: Word[]; onExit?: () => void; onFinish?: (score: number, total: number) => void }
+interface Props {
+    words: Word[]
+    level?: string
+    setNo?: number
+    setType?: string
+    onExit?: () => void
+    onFinish?: (score: number, total: number) => void
+}
 
-export default function QuizClient({ words, onExit, onFinish }: Props) {
+export default function QuizClient({ words, level, setNo, setType, onExit, onFinish }: Props) {
     const supabase = createClient()
     const [quiz, setQuiz] = useState<QuizQuestion[]>([])
     const [index, setIndex] = useState(0)
@@ -107,6 +114,25 @@ export default function QuizClient({ words, onExit, onFinish }: Props) {
         if (!finishCalledRef.current) {
             finishCalledRef.current = true
             onFinish?.(score, quiz.length)
+
+            // activity_log에 퀴즈 완료 기록
+            if (level && setNo != null) {
+                ;(async () => {
+                    const { data: { user } } = await supabase.auth.getUser()
+                    if (!user) return
+                    const loginInfoId = user.user_metadata?.login_info_id
+                    if (!loginInfoId) return
+                    await supabase.from('activity_log').insert({
+                        user_id: loginInfoId,
+                        activity_type: 'quiz_complete',
+                        level,
+                        set_no: setNo,
+                        set_type: setType || 'word',
+                        score,
+                        total: quiz.length,
+                    })
+                })()
+            }
         }
         if (wrongSavedRef.current || wrongWordIdsRef.current.length === 0) return
         wrongSavedRef.current = true
@@ -131,7 +157,7 @@ export default function QuizClient({ words, onExit, onFinish }: Props) {
             const { data: { user } } = await supabase.auth.getUser()
             if (!user) return
             await supabase.rpc('record_wrong_words', {
-                p_user_id: user.id,
+                p_user_id: user.user_metadata?.login_info_id,
                 p_word_ids: ids,
             })
         }

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence, type Transition } from 'framer-motion'
+import { createClient } from '@/lib/supabase/client'
 import type { Word } from '@/types/vocabulary'
 import QuizTimerBar from './QuizTimerBar'
 import styles from './study.module.css'
@@ -47,11 +48,15 @@ type ChallengeState = 'playing' | 'wrong' | 'finished' | 'failed'
 
 interface Props {
     words: Word[]
+    level?: string
+    setNo?: number
+    setType?: string
     onSuccess: () => void
     onExit: () => void
 }
 
-export default function MasterChallengeClient({ words, onSuccess, onExit }: Props) {
+export default function MasterChallengeClient({ words, level, setNo, setType, onSuccess, onExit }: Props) {
+    const supabase = createClient()
     const [quiz, setQuiz] = useState<MasterQuestion[]>([])
     const [index, setIndex] = useState(0)
     const [score, setScore] = useState(0)
@@ -153,7 +158,27 @@ export default function MasterChallengeClient({ words, onSuccess, onExit }: Prop
                 <p className={styles.resultPct}>100% 정답! 메달 획득!</p>
                 <motion.button
                     className={styles.masterCompleteBtn}
-                    onClick={onSuccess}
+                    onClick={async () => {
+                        // activity_log에 마스터 챌린지 성공 기록
+                        if (level && setNo != null) {
+                            const { data: { user } } = await supabase.auth.getUser()
+                            if (user) {
+                                const loginInfoId = user.user_metadata?.login_info_id
+                                if (loginInfoId) {
+                                    await supabase.from('activity_log').insert({
+                                        user_id: loginInfoId,
+                                        activity_type: 'master_complete',
+                                        level,
+                                        set_no: setNo,
+                                        set_type: setType || 'word',
+                                        score: quiz.length,
+                                        total: quiz.length,
+                                    })
+                                }
+                            }
+                        }
+                        onSuccess()
+                    }}
                     whileTap={{ scale: 0.93 }}
                     transition={spring}
                 >
