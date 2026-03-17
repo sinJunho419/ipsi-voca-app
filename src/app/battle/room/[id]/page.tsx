@@ -59,18 +59,23 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
     // 전적 기록
     const [records, setRecords] = useState<Record<number, { wins: number; losses: number }>>({})
 
+    // userId를 ref로도 보관 (폴링 클로저에서 최신 값 사용)
+    const userIdRef = useRef<number | null>(null)
+    useEffect(() => { userIdRef.current = userId }, [userId])
+
     // 방 정보 다시 가져오기 (폴링 & broadcast용)
     const fetchRoom = useCallback(async () => {
         const res = await fetch('/api/battle', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'get', roomId, userId }),
+            body: JSON.stringify({ action: 'get', roomId, userId: userIdRef.current }),
+            cache: 'no-store',
         })
         const result = await res.json()
         if (res.ok && result.room) {
             setRoom(normalizeRoom(result.room))
         }
-    }, [roomId, userId])
+    }, [roomId])
 
     // 1. 방 정보 로드
     useEffect(() => {
@@ -98,6 +103,7 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'get', roomId, userId: uid }),
+                cache: 'no-store',
             })
 
             const result = await res.json()
@@ -116,9 +122,9 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
         return () => { isMounted = false }
     }, [roomId, supabase])
 
-    // 2. Realtime: postgres_changes + Broadcast 구독 + 폴링 (3초)
+    // 2. Realtime: postgres_changes + Broadcast 구독
     useEffect(() => {
-        if (!roomId || !userId) return
+        if (!roomId) return
 
         const channel = supabase.channel(`room:${roomId}`)
             .on(
@@ -131,16 +137,19 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
             })
             .subscribe()
 
-        // 폴링: 3초마다 방 정보 갱신 (waiting 상태일 때만)
+        return () => { supabase.removeChannel(channel) }
+    }, [roomId, supabase, fetchRoom])
+
+    // 2.5. 폴링: 3초마다 방 정보 갱신
+    useEffect(() => {
+        if (!roomId) return
+
         const pollInterval = setInterval(() => {
             fetchRoom()
         }, 3000)
 
-        return () => {
-            supabase.removeChannel(channel)
-            clearInterval(pollInterval)
-        }
-    }, [roomId, userId, supabase, fetchRoom])
+        return () => { clearInterval(pollInterval) }
+    }, [roomId, fetchRoom])
 
     // 3. 참여자 이름 조회 (participant_ids 변경 시)
     const participantKey = (room?.participant_ids || []).join(',')
