@@ -636,8 +636,8 @@ export default function BattleClient({ room, myId }: Props) {
             <motion.div className={`${styles.card} ${styles.winnerCard}`}
                 initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={spring}>
                 <div className={styles.resultEmoji}>🚪</div>
-                <h2 className={styles.title}>응답 없음 - 자동 패배</h2>
-                <p style={{ textAlign: 'center', color: '#94a3b8', marginTop: '0.5rem' }}>
+                <h2 className={styles.title} style={{ fontSize: '1.2rem' }}>응답 없음 - 자동 패배</h2>
+                <p style={{ textAlign: 'center', color: '#94a3b8', marginTop: '0.5rem', fontSize: '0.85rem' }}>
                     연속 미응답으로 자동 패배 처리되었습니다.
                 </p>
                 <button className={styles.btnPrimary} style={{ marginTop: '2rem' }}
@@ -821,7 +821,7 @@ export default function BattleClient({ room, myId }: Props) {
                 </div>
                 <div className={styles.timerLabel}>
                     <span className={styles.timerIcon}>
-                        <Timer size={12} /> {timerDuration}초
+                        <Timer size={12} /> 0초
                     </span>
                     <span className={`${styles.timerCount} ${timerProgress <= 25 ? styles.timerCountUrgent : ''}`}>
                         {Math.ceil((timerProgress / 100) * timerDuration)}초
