@@ -1,22 +1,58 @@
 'use client'
 
-import { Suspense, useEffect, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 
 function EntryForm() {
     const params = useSearchParams()
+    const submitted = useRef(false)
     const [status, setStatus] = useState('인증 확인 중...')
 
     useEffect(() => {
+        if (submitted.current) return
+        submitted.current = true
+
         const payload = params.get('p')
         if (!payload) {
             setStatus('인증 정보가 없습니다.')
             return
         }
 
-        // payload를 localStorage에 저장하고 URL에서 제거
-        localStorage.setItem('auth_payload', payload)
-        window.location.replace('/auth/loading')
+        // URL에서 파라미터 즉시 제거 (페이지 이동 없이)
+        window.history.replaceState({}, '', '/auth/entry')
+
+        setStatus('서버 인증 요청 중...')
+
+        fetch('/api/auth/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ payload }),
+            credentials: 'same-origin',
+        })
+            .then(async res => {
+                const text = await res.text()
+                let data
+                try {
+                    data = JSON.parse(text)
+                } catch {
+                    setStatus(`응답 파싱 실패: ${text.substring(0, 200)}`)
+                    return
+                }
+                if (data.ok && data.redirectUrl) {
+                    // ipsinavi_login 쿠키 설정 (1일 유효)
+                    if (data.loginInfo) {
+                        const cookieValue = encodeURIComponent(JSON.stringify(data.loginInfo))
+                        document.cookie = `ipsinavi_login=${cookieValue}; path=/; max-age=86400; secure; samesite=lax`
+                    }
+                    setStatus('인증 성공! 이동 중...')
+                    window.location.replace(data.redirectUrl)
+                } else {
+                    setStatus(data.message || '인증에 실패했습니다.')
+                }
+            })
+            .catch((err) => {
+                setStatus(`네트워크 오류: ${err.message}`)
+            })
     }, [params])
 
     return (
