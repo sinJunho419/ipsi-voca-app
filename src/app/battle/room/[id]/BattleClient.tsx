@@ -121,30 +121,64 @@ function getTimerSec(word: Word, useSentence: boolean): number {
 
 const spring: Transition = { type: 'spring', stiffness: 420, damping: 30 }
 
+/** sessionStorage 키 */
+function storeKey(roomId: string) { return `battle_state_${roomId}` }
+
+interface SavedState {
+    index: number
+    scores: Record<number, number>
+    wrongWords: number[]
+    quizState: QuizState
+    quiz: QuizQuestion[]
+    questionStartedAt: number  // ms timestamp
+    afkCount: number
+}
+
+function saveState(roomId: string, state: SavedState) {
+    try { sessionStorage.setItem(storeKey(roomId), JSON.stringify(state)) } catch {}
+}
+
+function loadState(roomId: string): SavedState | null {
+    try {
+        const raw = sessionStorage.getItem(storeKey(roomId))
+        return raw ? JSON.parse(raw) : null
+    } catch { return null }
+}
+
+function clearState(roomId: string) {
+    try { sessionStorage.removeItem(storeKey(roomId)) } catch {}
+}
+
 export default function BattleClient({ room, myId }: Props) {
     const supabase = createClient()
-    const [quiz, setQuiz] = useState<QuizQuestion[]>([])
-    const [isLoading, setIsLoading] = useState(true)
 
-    const [index, setIndex] = useState(0)
+    // 저장된 상태 복원
+    const saved = useRef(loadState(room.id)).current
+    const isResuming = !!saved && saved.quizState === 'playing'
+
+    const [quiz, setQuiz] = useState<QuizQuestion[]>(saved?.quiz || [])
+    const [isLoading, setIsLoading] = useState(!isResuming)
+
+    const [index, setIndex] = useState(saved?.index || 0)
     const [selected, setSelected] = useState<string | null>(null)
-    const [quizState, setQuizState] = useState<QuizState>('countdown')
-    const [countdownNum, setCountdownNum] = useState<number | string>(3)
+    const [quizState, setQuizState] = useState<QuizState>(isResuming ? 'playing' : 'countdown')
+    const [countdownNum, setCountdownNum] = useState<number | string>(isResuming ? '' : 3)
 
     // N인 점수 추적
-    const [scores, setScores] = useState<Record<number, number>>({})
-    const scoresRef = useRef<Record<number, number>>({})
+    const [scores, setScores] = useState<Record<number, number>>(saved?.scores || {})
+    const scoresRef = useRef<Record<number, number>>(saved?.scores || {})
     const [participantNames, setParticipantNames] = useState<Record<number, string>>({})
 
     // 타이머
     const [timerProgress, setTimerProgress] = useState(100)
     const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+    const questionStartedAtRef = useRef<number>(saved?.questionStartedAt || 0)
 
     // 탈주 방지
-    const afkCountRef = useRef(0)
+    const afkCountRef = useRef(saved?.afkCount || 0)
 
     // 오답 단어 추적 (내 오답 + 다른 참여자 오답)
-    const wrongWordsRef = useRef<number[]>([])
+    const wrongWordsRef = useRef<number[]>(saved?.wrongWords || [])
     const allWrongWordsRef = useRef<Record<number, number[]>>({})
 
     // 리벤지 모드: 졸업 단어 추적
@@ -170,6 +204,24 @@ export default function BattleClient({ room, myId }: Props) {
     useEffect(() => { scoresRef.current = scores }, [scores])
     useEffect(() => { leftPlayersRef.current = leftPlayers }, [leftPlayers])
 
+    // 상태 저장 (새로고침 복원용)
+    useEffect(() => {
+        if (quizState === 'countdown' || quiz.length === 0) return
+        if (quizState === 'finished' || quizState === 'afk_lost') {
+            clearState(room.id)
+            return
+        }
+        saveState(room.id, {
+            index,
+            scores,
+            wrongWords: wrongWordsRef.current,
+            quizState,
+            quiz,
+            questionStartedAt: questionStartedAtRef.current,
+            afkCount: afkCountRef.current,
+        })
+    }, [index, scores, quizState, quiz, room.id])
+
     // 참여자 이름 조회
     useEffect(() => {
         const ids = room.participant_ids || []
@@ -187,8 +239,8 @@ export default function BattleClient({ room, myId }: Props) {
 
     const isRevenge = room.mode === 'revenge'
 
-    // 1. 데이터 로드 (최초 1회만 실행)
-    const dataLoadedRef = useRef(false)
+    // 1. 데이터 로드 (최초 1회만 실행, 복원 시 스킵)
+    const dataLoadedRef = useRef(isResuming)
     useEffect(() => {
         if (dataLoadedRef.current) return
         dataLoadedRef.current = true
@@ -353,10 +405,21 @@ export default function BattleClient({ room, myId }: Props) {
     }, [index, quizState])
 
     // 4. 퀴즈 타이머
-    const startTimer = useCallback((durationSec: number) => {
+    const startTimer = useCallback((durationSec: number, elapsedMs?: number) => {
         if (timerRef.current) clearInterval(timerRef.current)
-        setTimerProgress(100)
         const totalMs = durationSec * 1000
+        const elapsed = elapsedMs || 0
+        const remainMs = Math.max(totalMs - elapsed, 0)
+        const startProgress = (remainMs / totalMs) * 100
+
+        setTimerProgress(startProgress)
+        questionStartedAtRef.current = Date.now() - elapsed
+
+        if (remainMs <= 0) {
+            setTimerProgress(0)
+            return
+        }
+
         const intervalMs = 10
         const step = (intervalMs / totalMs) * 100
 
@@ -383,16 +446,26 @@ export default function BattleClient({ room, myId }: Props) {
     }, [timerProgress, quizState]) // eslint-disable-line react-hooks/exhaustive-deps
 
     // quiz를 ref로도 보관 (타이머 effect에서 참조하되 의존성에 넣지 않음)
-    const quizRef = useRef<QuizQuestion[]>([])
+    const quizRef = useRef<QuizQuestion[]>(quiz)
     useEffect(() => { quizRef.current = quiz }, [quiz])
 
-    // 문제 변경 시 타이머 시작
+    // 문제 변경 시 타이머 시작 (복원 시 경과 시간 반영)
+    const resumeHandledRef = useRef(false)
     useEffect(() => {
         if (quizState !== 'playing' || quizRef.current.length === 0) return
         const current = quizRef.current[index]
-        startTimer(current ? getTimerSec(current.word, current.useSentence) : 4)
+        const duration = current ? getTimerSec(current.word, current.useSentence) : 4
+
+        // 복원 직후 첫 타이머: 새로고침 동안 경과한 시간 반영
+        if (isResuming && !resumeHandledRef.current && questionStartedAtRef.current > 0) {
+            resumeHandledRef.current = true
+            const elapsed = Date.now() - questionStartedAtRef.current
+            startTimer(duration, elapsed)
+        } else {
+            startTimer(duration)
+        }
         return () => stopTimer()
-    }, [index, quizState, startTimer, stopTimer])
+    }, [index, quizState, startTimer, stopTimer]) // eslint-disable-line react-hooks/exhaustive-deps
 
     // 점수 브로드캐스트
     const broadcastScore = useCallback((newScore: number) => {
@@ -816,7 +889,7 @@ export default function BattleClient({ room, myId }: Props) {
                 <div className={styles.timerBar}>
                     <div
                         className={`${styles.timerFill} ${timerProgress <= 25 ? styles.timerBlink : ''}`}
-                        style={{ width: `${timerProgress}%`, backgroundColor: timerColor, transition: 'none', marginLeft: 'auto' }}
+                        style={{ width: `${timerProgress}%`, backgroundColor: timerColor, transition: 'none' }}
                     />
                 </div>
                 <div className={styles.timerLabel}>
