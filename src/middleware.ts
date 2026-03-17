@@ -6,13 +6,12 @@ import { NextRequest, NextResponse } from 'next/server'
  */
 export function middleware(request: NextRequest) {
     const loginCookie = request.cookies.get('ipsinavi_login')
-
-    // Supabase 인증 세션 쿠키도 확인 (기존 로그인 사용자 호환)
     const hasSupabaseSession = request.cookies.getAll().some(c =>
         c.name.startsWith('sb-') && c.name.includes('auth-token')
     )
 
-    if (!loginCookie?.value && !hasSupabaseSession) {
+    // 입시내비 인증 쿠키 + Supabase 세션 둘 다 있어야 접근 허용
+    if (!loginCookie?.value || !hasSupabaseSession) {
         return new NextResponse(
             `<!DOCTYPE html>
 <html lang="ko">
