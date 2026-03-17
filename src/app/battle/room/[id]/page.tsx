@@ -140,16 +140,16 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
         return () => { supabase.removeChannel(channel) }
     }, [roomId, supabase, fetchRoom])
 
-    // 2.5. 폴링: 3초마다 방 정보 갱신
+    // 2.5. 폴링: 3초마다 방 정보 갱신 (대기 상태에서만)
     useEffect(() => {
-        if (!roomId) return
+        if (!roomId || room?.status === 'playing' || room?.status === 'finished') return
 
         const pollInterval = setInterval(() => {
             fetchRoom()
         }, 3000)
 
         return () => { clearInterval(pollInterval) }
-    }, [roomId, fetchRoom])
+    }, [roomId, room?.status, fetchRoom])
 
     // 3. 참여자 이름 조회 (participant_ids 변경 시)
     const participantKey = (room?.participant_ids || []).join(',')

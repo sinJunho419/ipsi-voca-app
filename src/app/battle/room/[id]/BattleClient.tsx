@@ -187,13 +187,16 @@ export default function BattleClient({ room, myId }: Props) {
 
     const isRevenge = room.mode === 'revenge'
 
-    // 1. 데이터 로드
+    // 1. 데이터 로드 (최초 1회만 실행)
+    const dataLoadedRef = useRef(false)
     useEffect(() => {
+        if (dataLoadedRef.current) return
+        dataLoadedRef.current = true
+
         async function fetchWords() {
             let orderedWords: Word[] = []
 
             if (isRevenge) {
-                // 리벤지 모드: 내 오답 단어 로드
                 const { data: wrongData } = await supabase
                     .from('wrong_answers')
                     .select('word_id')
@@ -207,7 +210,6 @@ export default function BattleClient({ room, myId }: Props) {
                     const { data: words } = await supabase
                         .from('words').select('*').in('id', wordIds)
                     if (words && words.length > 0) {
-                        // 셔플
                         orderedWords = [...(words as Word[])].sort(() => Math.random() - 0.5)
                     }
                 }
@@ -233,7 +235,6 @@ export default function BattleClient({ room, myId }: Props) {
                 setQuiz(buildQuiz(orderedWords))
             }
 
-            // 초기 점수: 모든 참여자 0점
             const initial: Record<number, number> = {}
             ;(room.participant_ids || []).forEach(id => { initial[id] = 0 })
             setScores(initial)
@@ -241,7 +242,7 @@ export default function BattleClient({ room, myId }: Props) {
             setIsLoading(false)
         }
         fetchWords()
-    }, [room, supabase])
+    }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
     // 2. 카운트다운
     useEffect(() => {
@@ -345,11 +346,11 @@ export default function BattleClient({ room, myId }: Props) {
     // 자동 발음 (문장 문제가 아닐 때만 — 문장 문제에서는 정답 힌트가 됨)
     useEffect(() => {
         if (quizState !== 'playing') return
-        const q = quiz[index]
+        const q = quizRef.current[index]
         if (!q || (q.useSentence && q.sentenceWithBlank)) return
         const timer = setTimeout(() => speak(q.word.word), 500)
         return () => clearTimeout(timer)
-    }, [index, quiz, quizState])
+    }, [index, quizState])
 
     // 4. 퀴즈 타이머
     const startTimer = useCallback((durationSec: number) => {
@@ -385,17 +386,20 @@ export default function BattleClient({ room, myId }: Props) {
         setQuizState('wrong')
     }, [timerProgress, quizState, stopTimer])
 
+    // quiz를 ref로도 보관 (타이머 effect에서 참조하되 의존성에 넣지 않음)
+    const quizRef = useRef<QuizQuestion[]>([])
+    useEffect(() => { quizRef.current = quiz }, [quiz])
+
     // 문제 변경 시 타이머 시작 (index가 바뀔 때만)
     const prevIndexRef = useRef(-1)
     useEffect(() => {
-        if (quizState !== 'playing' || quiz.length === 0) return
-        // 같은 index에서 quizState만 바뀐 경우(wrong→playing) 중복 시작 방지
+        if (quizState !== 'playing' || quizRef.current.length === 0) return
         if (prevIndexRef.current === index) return
         prevIndexRef.current = index
-        const current = quiz[index]
+        const current = quizRef.current[index]
         startTimer(current ? getTimerSec(current.word, current.useSentence) : 4)
         return () => stopTimer()
-    }, [index, quizState, quiz, startTimer, stopTimer])
+    }, [index, quizState, startTimer, stopTimer])
 
     // 점수 브로드캐스트
     const broadcastScore = useCallback((newScore: number) => {
