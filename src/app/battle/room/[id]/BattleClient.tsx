@@ -230,7 +230,7 @@ export default function BattleClient({ room, myId }: Props) {
             const { data } = await supabase.from('profiles').select('id, name').in('id', ids)
             if (data) {
                 const names: Record<number, string> = {}
-                data.forEach(p => { names[p.id] = p.name || '익명' })
+                data.forEach(p => { names[Number(p.id)] = p.name || '익명' })
                 setParticipantNames(names)
             }
         }
@@ -664,7 +664,8 @@ export default function BattleClient({ room, myId }: Props) {
         }
 
         if (option === current.correct) {
-            const nextScore = myScore + 1
+            const pointsPerQ = Math.round(100 / total)
+            const nextScore = myScore + pointsPerQ
             setScores(prev => ({ ...prev, [myId]: nextScore }))
             broadcastScore(nextScore)
 
@@ -761,7 +762,7 @@ export default function BattleClient({ room, myId }: Props) {
                                     </span>
                                 )}
                             </span>
-                            <span className={styles.resultPt}>{entry.isLeft ? '0pt' : `${entry.score}pt`}</span>
+                            <span className={styles.resultPt}>{entry.isLeft ? '0점' : `${entry.score}점`}</span>
                         </motion.div>
                     ))}
                 </div>
@@ -875,7 +876,7 @@ export default function BattleClient({ room, myId }: Props) {
                             animate={{ scale: 1 }}
                             transition={{ duration: 0.2 }}
                         >
-                            {entry.score}
+                            {entry.score}점
                         </motion.span>
                     </motion.div>
                 ))}
