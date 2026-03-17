@@ -814,9 +814,9 @@ export default function BattleClient({ room, myId }: Props) {
             {/* ── 타이머 게이지 ── */}
             <div className={styles.battleTimerWrap}>
                 <div className={styles.timerBar}>
-                    <motion.div
+                    <div
                         className={`${styles.timerFill} ${timerProgress <= 25 ? styles.timerBlink : ''}`}
-                        style={{ width: `${timerProgress}%`, backgroundColor: timerColor }}
+                        style={{ width: `${timerProgress}%`, backgroundColor: timerColor, transition: 'none' }}
                     />
                 </div>
                 <div className={styles.timerLabel}>
