@@ -639,6 +639,15 @@ export default function BattleClient({ room, myId, initialNames }: Props) {
         return () => clearTimeout(timer)
     }, [quizState])
 
+    // 이름이 아직 로드 안 된 참여자가 있으면 재조회
+    // (early return보다 위에 있어야 Hook 순서 보장)
+    useEffect(() => {
+        if (isLoading || quiz.length === 0) return
+        const ids = room.participant_ids || []
+        const hasUnnamed = ids.some(id => !participantNames[id])
+        if (hasUnnamed) fetchNamesRef.current()
+    }, [isLoading, quiz.length, participantNames, room.participant_ids])
+
     if (isLoading) return <div className={styles.loader}>{isRevenge ? '리벤지 배틀 준비 중...' : '영단어 전쟁 준비 중...'}</div>
     if (quiz.length === 0) return (
         <div className={`${styles.card} ${styles.winnerCard}`}>
@@ -678,11 +687,7 @@ export default function BattleClient({ room, myId, initialNames }: Props) {
             return b.score - a.score
         })
 
-    // 이름이 아직 로드 안 된 참여자가 있으면 재조회
-    const hasUnnamed = leaderboard.some(e => e.name === '...')
-    useEffect(() => {
-        if (hasUnnamed) fetchNamesRef.current()
-    }, [hasUnnamed])
+    // 이름이 아직 로드 안 된 참여자가 있으면 재조회 (handleSelect 내에서 처리)
 
     function handleSelect(option: string) {
         if (selected !== null || quizState !== 'playing') return
