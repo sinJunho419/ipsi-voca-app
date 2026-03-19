@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
 import {
     BarChart3, Trophy, Swords, BookCheck, BookOpen, ClipboardCheck,
-    ChevronLeft, ChevronRight, ArrowLeft, Users, Target
+    ChevronLeft, ChevronRight, ArrowLeft, Users
 } from 'lucide-react'
 import {
     BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
@@ -315,48 +315,7 @@ export default function ReportClient() {
             </div>
         </div>,
 
-        // 3: 라이벌 & 성과
-        <div key="rival" className={styles.cardInner}>
-            <h2 className={styles.cardTitle}>
-                <Target size={22} /> 라이벌 & 성과
-            </h2>
-            {report.topRivalName ? (
-                <div className={styles.rivalBox}>
-                    <div className={styles.rivalAvatar}>
-                        <Swords size={24} />
-                    </div>
-                    <div>
-                        <p className={styles.rivalName}>{report.topRivalName}</p>
-                        <p className={styles.rivalSub}>이번 주 {report.topRivalCount}회 대전</p>
-                    </div>
-                    <span className={styles.rivalBadge}>최다 라이벌</span>
-                </div>
-            ) : (
-                <div className={styles.emptyRival}>
-                    <p>이번 주 대전 상대가 없습니다</p>
-                    <small>배틀에 참여해보세요!</small>
-                </div>
-            )}
-            <div className={styles.achievementRow}>
-                <div className={styles.achieveBox}>
-                    <Trophy size={28} style={{ color: '#eab308' }} />
-                    <span className={styles.achieveValue}>{report.wins}승</span>
-                    <span className={styles.achieveLabel}>이번 주 승리</span>
-                </div>
-                <div className={styles.achieveBox}>
-                    <BookCheck size={28} style={{ color: '#10b981' }} />
-                    <span className={styles.achieveValue}>{report.masteredWordCount}개</span>
-                    <span className={styles.achieveLabel}>정복 단어</span>
-                </div>
-                <div className={styles.achieveBox}>
-                    <span style={{ fontSize: '1.6rem' }}>🔗</span>
-                    <span className={styles.achieveValue}>{report.masteredIdiomCount}개</span>
-                    <span className={styles.achieveLabel}>정복 숙어</span>
-                </div>
-            </div>
-        </div>,
-
-        // 4: 학원 비교
+        // 3: 학원 비교
         <div key="academy" className={styles.cardInner}>
             <h2 className={styles.cardTitle}>
                 <Users size={22} /> 학원 비교

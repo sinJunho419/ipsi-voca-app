@@ -509,7 +509,6 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
                                             {tierInfo.label}
                                         </span>
                                     )}
-                                    {isThisHost && <span className={styles.hostTag}>방장</span>}
                                     <div className={styles.recordBadge}>
                                         <span className={styles.recordWin}>{records[pid]?.wins ?? 0}승</span>
                                         <span className={styles.recordLose}>{records[pid]?.losses ?? 0}패</span>

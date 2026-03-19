@@ -47,13 +47,14 @@ export async function POST(request: NextRequest) {
             .lt('created_at', weekEnd)
 
         // 내 배틀만 필터 (혼자 한 것 제외: participants 2명 이상)
-        const myBattles = (battles || []).filter(b =>
-            (b.participants_ids || []).length > 1 &&
-            (b.participants_ids || []).includes(userId)
-        )
+        // bigint[]는 문자열로 반환될 수 있으므로 Number 변환 후 비교
+        const myBattles = (battles || []).filter(b => {
+            const pids = (b.participants_ids || []).map(Number)
+            return pids.length > 1 && pids.includes(userId)
+        })
 
         const totalBattles = myBattles.length
-        const wins = myBattles.filter(b => b.winner_id === userId).length
+        const wins = myBattles.filter(b => Number(b.winner_id) === userId).length
         const winRate = totalBattles > 0 ? Math.round((wins / totalBattles) * 100) : 0
 
         // 학습/테스트 횟수
@@ -92,24 +93,6 @@ export async function POST(request: NextRequest) {
             masteredIdiomCount = idiomCount || 0
         }
         const masteredWordCount = masteredTotal - masteredIdiomCount
-
-        // 최다 대전 상대
-        const rivalCounts: Record<number, number> = {}
-        myBattles.forEach(b => {
-            (b.participants_ids || []).forEach((pid: number) => {
-                if (pid !== userId) rivalCounts[pid] = (rivalCounts[pid] || 0) + 1
-            })
-        })
-        const rivalEntries = Object.entries(rivalCounts).sort(([, a], [, b]) => b - a)
-        const topRivalId = rivalEntries[0]?.[0] ? Number(rivalEntries[0][0]) : null
-        const topRivalCount = rivalEntries[0]?.[1] || 0
-
-        let topRivalName: string | null = null
-        if (topRivalId) {
-            const { data: rivalProfile } = await admin
-                .from('profiles').select('name').eq('id', topRivalId).single()
-            topRivalName = rivalProfile?.name || '익명'
-        }
 
         // 요일별 활동 (배틀 + 학습 + 테스트)
         const dayCounts: number[] = [0, 0, 0, 0, 0, 0, 0]
@@ -153,10 +136,11 @@ export async function POST(request: NextRequest) {
                 let userCount = 0
 
                 for (const uid of academyIds) {
-                    const userBattles = (battles || []).filter(b =>
-                        (b.participants_ids || []).length > 1 &&
-                        (b.participants_ids || []).includes(uid)
-                    )
+                    const uidNum = Number(uid)
+                    const userBattles = (battles || []).filter(b => {
+                        const pids = (b.participants_ids || []).map(Number)
+                        return pids.length > 1 && pids.includes(uidNum)
+                    })
 
                     const { count: uStudy } = await admin
                         .from('activity_log')
@@ -174,9 +158,9 @@ export async function POST(request: NextRequest) {
                         .gte('created_at', weekStart)
                         .lt('created_at', weekEnd)
 
-                    if (userBattles.length === 0 && (uStudy || 0) === 0 && (uQuiz || 0) === 0 && uid !== userId) continue
+                    if (userBattles.length === 0 && (uStudy || 0) === 0 && (uQuiz || 0) === 0 && uidNum !== userId) continue
 
-                    const uWins = userBattles.filter(b => b.winner_id === uid).length
+                    const uWins = userBattles.filter(b => Number(b.winner_id) === uidNum).length
 
                     const { count: uMastered } = await admin
                         .from('wrong_answers')
@@ -214,7 +198,6 @@ export async function POST(request: NextRequest) {
                 totalBattles, wins, winRate,
                 masteredWordCount,
                 masteredIdiomCount,
-                topRivalId, topRivalName, topRivalCount,
                 dailyActivity, totalActivity,
             },
             academyAvg,
