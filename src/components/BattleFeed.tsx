@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
+import { Swords } from 'lucide-react'
 
 interface FeedItem {
     id: string
@@ -17,39 +18,50 @@ interface FeedItem {
 function getFeedMessage(feed: FeedItem): React.ReactNode {
     const diff = feed.winner_score - feed.loser_score
     const isDouble = feed.winner_score >= feed.loser_score * 2 && feed.winner_score > 0
-    const isMassive = feed.participant_count >= 50
+    const isMulti = feed.participant_count >= 3
 
-    if (isMassive) {
+    if (isMulti) {
         return (
-            <span>
-                총 <strong style={{ color: '#f59e0b' }}>{feed.participant_count}명</strong>의 난전 속에서{' '}
-                <strong style={{ color: '#6366f1' }}>{feed.winner_name}</strong>님이 최후의 우승! 🎖️
-            </span>
+            <>
+                총 <strong>{feed.participant_count}명</strong>의 난전 속에서{' '}
+                <strong style={{ color: '#a78bfa' }}>{feed.winner_name}</strong>님이 최후의 우승!
+            </>
         )
     }
 
     if (isDouble) {
         return (
-            <span>
-                공부 괴물 <strong style={{ color: '#6366f1' }}>{feed.winner_name}</strong>님이 무대를 장악했습니다! 👑
-            </span>
+            <>
+                <strong style={{ color: '#a78bfa' }}>{feed.winner_name}</strong>님이 무대를 장악했습니다!
+            </>
         )
     }
 
     if (diff <= 10) {
         return (
-            <span>
-                <strong style={{ color: '#ef4444' }}>{feed.winner_name}</strong>님이{' '}
-                <strong style={{ color: '#3b82f6' }}>{feed.loser_name}</strong>님과 혈투 끝에 승리! ⚔️
-            </span>
+            <>
+                <strong style={{ color: '#a78bfa' }}>{feed.winner_name}</strong>님이{' '}
+                <strong style={{ color: '#94a3b8' }}>{feed.loser_name}</strong>님과 혈투 끝에 승리!
+            </>
         )
     }
 
     return (
-        <span>
-            🏆 <strong style={{ color: '#10b981' }}>{feed.winner_name}</strong>님이 배틀에서 승리했습니다!
-        </span>
+        <>
+            <strong style={{ color: '#a78bfa' }}>{feed.winner_name}</strong>님이 배틀에서 승리!
+        </>
     )
+}
+
+function getTimeAgo(dateStr: string): string {
+    const diff = Date.now() - new Date(dateStr).getTime()
+    const min = Math.floor(diff / 60000)
+    if (min < 1) return '방금'
+    if (min < 60) return `${min}분 전`
+    const hr = Math.floor(min / 60)
+    if (hr < 24) return `${hr}시간 전`
+    const day = Math.floor(hr / 24)
+    return `${day}일 전`
 }
 
 export default function BattleFeed() {
@@ -63,27 +75,30 @@ export default function BattleFeed() {
         return () => { mountedRef.current = false }
     }, [])
 
+    // 초기 로드: API에서 과거 기록 5건 조회
     useEffect(() => {
-        async function init() {
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) return
-            const loginInfoId = user.user_metadata?.login_info_id as number
-            if (!loginInfoId) return
-            const { data: profile } = await supabase
-                .from('profiles').select('NsiteID').eq('id', loginInfoId).single()
-            if (profile?.NsiteID && mountedRef.current) {
-                setAcademyId(profile.NsiteID)
-            }
+        async function loadFeed() {
+            try {
+                const res = await fetch('/api/battle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'feed' }),
+                    cache: 'no-store',
+                })
+                if (!res.ok) return
+                const data = await res.json()
+                if (!mountedRef.current) return
+                if (data.feeds) setFeeds(data.feeds)
+                if (data.academyId) setAcademyId(data.academyId)
+            } catch { /* ignore */ }
         }
-        init()
-    }, [supabase])
+        loadFeed()
+    }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+    // 실시간 새 배틀 수신
     useEffect(() => {
         if (!academyId) return
 
-        // Postgres Changes 대신 academy별 Broadcast 채널 사용
-        // BattleClient가 battle_history INSERT 후 이 채널로 피드를 발행
-        // → DB 폴링 없이 순수 WebSocket만 사용하므로 50명+ 동시접속에 유리
         const channel = supabase.channel(`academy_feed:${academyId}`, {
             config: { broadcast: { self: true } },
         })
@@ -92,122 +107,75 @@ export default function BattleFeed() {
             .on('broadcast', { event: 'battle_result' }, (payload) => {
                 if (!mountedRef.current) return
                 const data = payload.payload as FeedItem
-                setFeeds(prev => [data, ...prev].slice(0, 5))
-
-                setTimeout(() => {
-                    if (!mountedRef.current) return
-                    setFeeds(prev => prev.filter(f => f.id !== data.id))
-                }, 5000)
+                setFeeds(prev => {
+                    if (prev.some(f => f.id === data.id)) return prev
+                    return [data, ...prev].slice(0, 5)
+                })
             })
             .subscribe()
 
-        // 폴백: Postgres Changes도 구독 (피드 발행 누락 대비)
-        const pgChannel = supabase.channel(`battle_history_pg:${academyId}`)
-        pgChannel
-            .on(
-                'postgres_changes',
-                {
-                    event: 'INSERT',
-                    schema: 'public',
-                    table: 'battle_history',
-                    filter: `NsiteID=eq.${academyId}`
-                },
-                async (pgPayload) => {
-                    if (!mountedRef.current) return
-                    const entry = pgPayload.new as Record<string, unknown>
-
-                    // 이미 Broadcast로 받은 피드인지 확인
-                    setFeeds(prev => {
-                        if (prev.some(f => f.id === entry.id)) return prev
-                        return prev // 중복이 아니면 아래에서 처리
-                    })
-
-                    const scores = entry.scores as Record<string, number>
-                    const participantIds = entry.participants_ids as number[]
-                    const winnerId = entry.winner_id as number
-                    if (!winnerId) return
-
-                    const { data: winnerProfile } = await supabase
-                        .from('profiles').select('name').eq('id', winnerId).single()
-
-                    const loserId = participantIds.find(id => id !== winnerId)
-                    let loserName = '상대'
-                    if (loserId) {
-                        const { data: loserProfile } = await supabase
-                            .from('profiles').select('name').eq('id', loserId).single()
-                        loserName = loserProfile?.name || '익명'
-                    }
-
-                    const sortedScores = Object.values(scores).sort((a, b) => b - a)
-
-                    const feed: FeedItem = {
-                        id: entry.id as string,
-                        winner_name: winnerProfile?.name || '익명',
-                        loser_name: loserName,
-                        winner_score: sortedScores[0] || 0,
-                        loser_score: sortedScores[1] || 0,
-                        participant_count: participantIds.length,
-                        created_at: entry.created_at as string
-                    }
-
-                    if (!mountedRef.current) return
-                    setFeeds(prev => {
-                        if (prev.some(f => f.id === feed.id)) return prev
-                        const next = [feed, ...prev].slice(0, 5)
-                        return next
-                    })
-
-                    setTimeout(() => {
-                        if (!mountedRef.current) return
-                        setFeeds(prev => prev.filter(f => f.id !== feed.id))
-                    }, 5000)
-                }
-            )
-            .subscribe()
-
-        return () => {
-            supabase.removeChannel(channel)
-            supabase.removeChannel(pgChannel)
-        }
+        return () => { supabase.removeChannel(channel) }
     }, [academyId, supabase])
+
+    if (feeds.length === 0) return null
 
     return (
         <div style={{
-            position: 'fixed',
-            bottom: '20px',
-            right: '20px',
-            zIndex: 9999,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '10px',
-            pointerEvents: 'none',
-            maxHeight: 'calc(100vh - 200px)',
+            width: '100%',
+            marginBottom: '0.75rem',
         }}>
-            <AnimatePresence>
-                {feeds.map(feed => (
-                    <motion.div
-                        key={feed.id}
-                        initial={{ opacity: 0, x: 50, scale: 0.9 }}
-                        animate={{ opacity: 1, x: 0, scale: 1 }}
-                        exit={{ opacity: 0, x: 20, scale: 0.9 }}
-                        style={{
-                            background: 'rgba(255, 255, 255, 0.85)',
-                            backdropFilter: 'blur(12px)',
-                            padding: '12px 18px',
-                            borderRadius: '16px',
-                            boxShadow: '0 8px 32px rgba(99, 102, 241, 0.15)',
-                            border: '1.5px solid rgba(99, 102, 241, 0.2)',
-                            fontSize: '0.82rem',
-                            fontWeight: 600,
-                            color: '#1e1b4b',
-                            maxWidth: '300px',
-                            pointerEvents: 'auto'
-                        }}
-                    >
-                        {getFeedMessage(feed)}
-                    </motion.div>
-                ))}
-            </AnimatePresence>
+            <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                marginBottom: '0.5rem',
+                color: '#94a3b8',
+                fontSize: '0.78rem',
+                fontWeight: 700,
+            }}>
+                <Swords size={14} />
+                <span>최근 배틀</span>
+            </div>
+            <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '6px',
+            }}>
+                <AnimatePresence initial={false}>
+                    {feeds.map(feed => (
+                        <motion.div
+                            key={feed.id}
+                            initial={{ opacity: 0, y: -10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, height: 0 }}
+                            transition={{ duration: 0.25 }}
+                            style={{
+                                background: 'rgba(99, 102, 241, 0.06)',
+                                padding: '10px 14px',
+                                borderRadius: '12px',
+                                border: '1px solid rgba(99, 102, 241, 0.1)',
+                                fontSize: '0.8rem',
+                                fontWeight: 500,
+                                color: '#e2e8f0',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: '8px',
+                            }}
+                        >
+                            <span style={{ flex: 1, lineHeight: 1.4 }}>{getFeedMessage(feed)}</span>
+                            <span style={{
+                                fontSize: '0.68rem',
+                                color: '#64748b',
+                                whiteSpace: 'nowrap',
+                                flexShrink: 0,
+                            }}>
+                                {getTimeAgo(feed.created_at)}
+                            </span>
+                        </motion.div>
+                    ))}
+                </AnimatePresence>
+            </div>
         </div>
     )
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
@@ -85,6 +85,7 @@ export default function ReportClient() {
     // 카드 캐러셀
     const [cardIndex, setCardIndex] = useState(0)
     const [direction, setDirection] = useState(0)
+    const touchStartX = useRef(0)
 
     const weekStart = getWeekStart(weekOffset)
     const weekEnd = new Date(weekStart)
@@ -93,191 +94,35 @@ export default function ReportClient() {
     useEffect(() => {
         async function load() {
             setIsLoading(true)
+
+            // 인증 확인
             const { data: { user } } = await supabase.auth.getUser()
             if (!user) { setIsLoading(false); return }
             const loginInfoId = user.user_metadata?.login_info_id as number
             if (!loginInfoId) { setIsLoading(false); return }
             setUserId(loginInfoId)
 
-            // 프로필
-            const { data: profile } = await supabase
-                .from('profiles').select('name, NsiteID').eq('id', loginInfoId).single()
-            setUserName(profile?.name || '학생')
-
-            const ws = weekStart.toISOString()
-            const we = weekEnd.toISOString()
-
-            // 배틀 기록 (이번 주)
-            const { data: battles } = await supabase
-                .from('battle_history')
-                .select('winner_id, participants_ids, created_at')
-                .gte('created_at', ws)
-                .lt('created_at', we)
-
-            const myBattles = (battles || []).filter(b =>
-                (b.participants_ids || []).includes(loginInfoId)
-            )
-
-            const totalBattles = myBattles.length
-            const wins = myBattles.filter(b => b.winner_id === loginInfoId).length
-            const winRate = totalBattles > 0 ? Math.round((wins / totalBattles) * 100) : 0
-
-            // 학습/테스트 횟수 (이번 주)
-            const { count: studyCount } = await supabase
-                .from('activity_log')
-                .select('*', { count: 'exact', head: true })
-                .eq('user_id', loginInfoId)
-                .eq('activity_type', 'study_complete')
-                .gte('created_at', ws)
-                .lt('created_at', we)
-
-            const { count: quizCount } = await supabase
-                .from('activity_log')
-                .select('*', { count: 'exact', head: true })
-                .eq('user_id', loginInfoId)
-                .eq('activity_type', 'quiz_complete')
-                .gte('created_at', ws)
-                .lt('created_at', we)
-
-            // 정복 단어/숙어 (누적)
-            const { data: masteredRows } = await supabase
-                .from('wrong_answers')
-                .select('word_id')
-                .eq('user_id', loginInfoId)
-                .eq('status', 'Mastered')
-
-            let masteredIdiomCount = 0
-            const masteredTotal = masteredRows?.length || 0
-            if (masteredRows && masteredRows.length > 0) {
-                const masteredIds = masteredRows.map(r => r.word_id)
-                const { count: idiomCount } = await supabase
-                    .from('words')
-                    .select('*', { count: 'exact', head: true })
-                    .in('id', masteredIds)
-                    .eq('type', 'idiom')
-                masteredIdiomCount = idiomCount || 0
-            }
-            const masteredWordCount = masteredTotal - masteredIdiomCount
-
-            // 최다 대전 상대
-            const rivalCounts: Record<number, number> = {}
-            myBattles.forEach(b => {
-                (b.participants_ids || []).forEach((pid: number) => {
-                    if (pid !== loginInfoId) rivalCounts[pid] = (rivalCounts[pid] || 0) + 1
+            // API 경유로 모든 데이터 조회 (RLS 우회)
+            try {
+                const res = await fetch('/api/report', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'weekly',
+                        weekStart: weekStart.toISOString(),
+                        weekEnd: weekEnd.toISOString(),
+                    }),
+                    cache: 'no-store',
                 })
-            })
-            const rivalEntries = Object.entries(rivalCounts).sort(([, a], [, b]) => b - a)
-            const topRivalId = rivalEntries[0]?.[0] ? Number(rivalEntries[0][0]) : null
-            const topRivalCount = rivalEntries[0]?.[1] || 0
 
-            let topRivalName: string | null = null
-            if (topRivalId) {
-                const { data: rivalProfile } = await supabase
-                    .from('profiles').select('name').eq('id', topRivalId).single()
-                topRivalName = rivalProfile?.name || '익명'
-            }
+                if (!res.ok) { setIsLoading(false); return }
+                const data = await res.json()
 
-            // 요일별 활동 (배틀 + 학습 + 테스트)
-            const dayCounts: number[] = [0, 0, 0, 0, 0, 0, 0]
-            myBattles.forEach(b => {
-                const d = new Date(b.created_at)
-                const dow = d.getDay()
-                dayCounts[dow === 0 ? 6 : dow - 1]++
-            })
-
-            const { data: activityRows } = await supabase
-                .from('activity_log')
-                .select('created_at')
-                .eq('user_id', loginInfoId)
-                .gte('created_at', ws)
-                .lt('created_at', we)
-
-            ;(activityRows || []).forEach(r => {
-                const d = new Date(r.created_at)
-                const dow = d.getDay()
-                dayCounts[dow === 0 ? 6 : dow - 1]++
-            })
-
-            const dailyActivity = DAY_LABELS.map((day, i) => ({ day, count: dayCounts[i] }))
-            const totalActivity = (studyCount || 0) + (quizCount || 0) + totalBattles
-
-            setReport({
-                studyCount: studyCount || 0,
-                quizCount: quizCount || 0,
-                totalBattles, wins, winRate,
-                masteredWordCount,
-                masteredIdiomCount,
-                topRivalId, topRivalName, topRivalCount,
-                dailyActivity, totalActivity,
-            })
-
-            // 학원 평균 비교
-            if (profile?.NsiteID) {
-                const { data: academyUsers } = await supabase
-                    .from('profiles').select('id').eq('NsiteID', profile.NsiteID)
-
-                if (academyUsers && academyUsers.length > 1) {
-                    const academyIds = academyUsers.map(u => u.id)
-                    const allBattles = (battles || [])
-
-                    let totalBattlesSum = 0
-                    let totalWinsSum = 0
-                    let totalMasteredSum = 0
-                    let totalStudySum = 0
-                    let totalQuizSum = 0
-                    let userCount = 0
-
-                    for (const uid of academyIds) {
-                        const userBattles = allBattles.filter(b =>
-                            (b.participants_ids || []).includes(uid)
-                        )
-
-                        const { count: uStudy } = await supabase
-                            .from('activity_log')
-                            .select('*', { count: 'exact', head: true })
-                            .eq('user_id', uid)
-                            .eq('activity_type', 'study_complete')
-                            .gte('created_at', ws)
-                            .lt('created_at', we)
-
-                        const { count: uQuiz } = await supabase
-                            .from('activity_log')
-                            .select('*', { count: 'exact', head: true })
-                            .eq('user_id', uid)
-                            .eq('activity_type', 'quiz_complete')
-                            .gte('created_at', ws)
-                            .lt('created_at', we)
-
-                        if (userBattles.length === 0 && (uStudy || 0) === 0 && (uQuiz || 0) === 0 && uid !== loginInfoId) continue
-
-                        const uWins = userBattles.filter(b => b.winner_id === uid).length
-
-                        const { count: uMastered } = await supabase
-                            .from('wrong_answers')
-                            .select('*', { count: 'exact', head: true })
-                            .eq('user_id', uid)
-                            .eq('status', 'Mastered')
-
-                        totalBattlesSum += userBattles.length
-                        totalWinsSum += userBattles.length > 0
-                            ? Math.round((uWins / userBattles.length) * 100)
-                            : 0
-                        totalMasteredSum += (uMastered || 0)
-                        totalStudySum += (uStudy || 0)
-                        totalQuizSum += (uQuiz || 0)
-                        userCount++
-                    }
-
-                    if (userCount > 0) {
-                        setAcademyAvg({
-                            avgBattles: Math.round(totalBattlesSum / userCount),
-                            avgWinRate: Math.round(totalWinsSum / userCount),
-                            avgMastered: Math.round(totalMasteredSum / userCount),
-                            avgStudy: Math.round(totalStudySum / userCount),
-                            avgQuiz: Math.round(totalQuizSum / userCount),
-                        })
-                    }
-                }
+                setUserName(data.userName)
+                setReport(data.report)
+                if (data.academyAvg) setAcademyAvg(data.academyAvg)
+            } catch {
+                // 네트워크 에러
             }
 
             setIsLoading(false)
@@ -341,7 +186,6 @@ export default function ReportClient() {
             <h2 className={styles.cardTitle}>
                 <BarChart3 size={22} /> 이번 주 요약
             </h2>
-            <p className={styles.greeting}>{userName}님의 주간 리포트</p>
             <div className={styles.statGrid}>
                 <div className={styles.statBox}>
                     <BookOpen size={20} className={styles.statIcon} />
@@ -550,9 +394,6 @@ export default function ReportClient() {
             {/* 헤더 */}
             <motion.div className={styles.header}
                 initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
-                <button className={styles.backBtn} onClick={() => router.push('/study')}>
-                    <ArrowLeft size={16} /> 돌아가기
-                </button>
                 <h1 className={styles.pageTitle}>주간 리포트</h1>
             </motion.div>
 
@@ -575,7 +416,17 @@ export default function ReportClient() {
             </div>
 
             {/* 카드 캐러셀 */}
-            <div className={styles.carousel}>
+            <div
+                className={styles.carousel}
+                onTouchStart={e => { touchStartX.current = e.touches[0].clientX }}
+                onTouchEnd={e => {
+                    const dx = e.changedTouches[0].clientX - touchStartX.current
+                    if (Math.abs(dx) > 50) {
+                        if (dx < 0 && safeIndex < totalCards - 1) navigate(1)
+                        else if (dx > 0 && safeIndex > 0) navigate(-1)
+                    }
+                }}
+            >
                 <AnimatePresence initial={false} custom={direction} mode="wait">
                     <motion.div
                         key={safeIndex}
@@ -619,6 +470,11 @@ export default function ReportClient() {
                     </button>
                 </div>
             </div>
+
+            {/* 하단 돌아가기 */}
+            <button className={styles.backBtnBottom} onClick={() => router.push('/study')}>
+                <ArrowLeft size={16} /> 돌아가기
+            </button>
         </div>
     )
 }

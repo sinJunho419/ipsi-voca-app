@@ -124,6 +124,38 @@ export async function POST(request: NextRequest) {
         }
 
         const userId = linkData.user.id
+        const nidNum = parseInt(nid, 10)
+
+        // ── ipsinavi_Login_info 조회/생성 → loginInfoId 확보 ──
+        let loginInfoId: number
+        const { data: existingLogin } = await adminClient
+            .from('ipsinavi_login_info')
+            .select('id')
+            .eq('UserNID', nidNum)
+            .single()
+
+        if (existingLogin) {
+            loginInfoId = existingLogin.id
+            // expires_at 갱신
+            adminClient.from('ipsinavi_login_info')
+                .update({
+                    expires_at: new Date(Date.now() + 10 * 60 * 60 * 1000).toISOString(),
+                    status: 'active',
+                    supabase_uid: userId,
+                })
+                .eq('id', loginInfoId)
+                .then(() => {})
+        } else {
+            const { data: inserted } = await adminClient.from('ipsinavi_login_info').insert({
+                UserNID: nidNum,
+                UserName: displayName,
+                status: 'active',
+                supabase_uid: userId,
+                expires_at: new Date(Date.now() + 10 * 60 * 60 * 1000).toISOString(),
+            }).select('id').single()
+            loginInfoId = inserted!.id
+        }
+
         const cookieStore = await cookies()
         const serverClient = createServerClient(
             process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -157,12 +189,12 @@ export async function POST(request: NextRequest) {
 
         // ── updateUser, profiles upsert: fire-and-forget (세션에 불필요) ──
         adminClient.auth.admin.updateUserById(userId, {
-            user_metadata: { nid, sname: displayName, source: 'inputnavi' },
+            user_metadata: { nid, sname: displayName, source: 'inputnavi', login_info_id: loginInfoId },
         }).catch(() => {})
 
         Promise.resolve(
             adminClient.from('profiles').upsert(
-                { id: userId, name: displayName },
+                { id: loginInfoId, name: displayName },
                 { onConflict: 'id' }
             )
         ).catch(() => {})

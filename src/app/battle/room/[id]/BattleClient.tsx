@@ -223,25 +223,33 @@ export default function BattleClient({ room, myId, initialNames }: Props) {
         })
     }, [index, scores, quizState, quiz, room.id])
 
-    // 참여자 이름 조회 (initialNames가 비어있을 때만, API 경유)
+    // 참여자 이름 조회 (API 경유로 RLS 우회)
+    const fetchNamesRef = useRef<() => Promise<void>>(() => Promise.resolve())
     useEffect(() => {
         const ids = room.participant_ids || []
         if (ids.length === 0) return
-        if (initialNames && ids.every(id => initialNames[id])) return
 
-        async function fetchNames() {
-            const res = await fetch('/api/battle', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'names', ids, userId: myId }),
-                cache: 'no-store',
-            })
-            const result = await res.json()
-            if (result.names) {
-                setParticipantNames(prev => ({ ...prev, ...result.names }))
-            }
+        async function doFetch() {
+            try {
+                const res = await fetch('/api/battle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'names', ids, userId: myId }),
+                    cache: 'no-store',
+                })
+                if (!res.ok) return
+                const result = await res.json()
+                if (result.names && Object.keys(result.names).length > 0) {
+                    setParticipantNames(prev => ({ ...prev, ...result.names }))
+                }
+            } catch { /* 네트워크 에러 무시 */ }
         }
-        fetchNames()
+        fetchNamesRef.current = doFetch
+
+        // 즉시 1회 + 2초 후 재시도 (첫 호출 실패 대비)
+        doFetch()
+        const retry = setTimeout(doFetch, 2000)
+        return () => clearTimeout(retry)
     }, [room.participant_ids, myId]) // eslint-disable-line react-hooks/exhaustive-deps
 
     const isRevenge = room.mode === 'revenge'
@@ -525,10 +533,22 @@ export default function BattleClient({ room, myId, initialNames }: Props) {
             winnerId = Number(topPlayers[0][0])
         }
 
-        // 전체 프로필 조회 (한 번에)
-        const { data: profiles } = await supabase
-            .from('profiles').select('id, name, NsiteID').in('id', participantIds)
-        const profileMap = new Map(profiles?.map(p => [p.id, p]) || [])
+        // 전체 프로필 조회 (API 경유로 RLS 우회)
+        let profileMap = new Map<number, { id: number; name: string | null; NsiteID: number | null }>()
+        try {
+            const res = await fetch('/api/battle', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'profiles', ids: participantIds, userId: myId }),
+                cache: 'no-store',
+            })
+            const result = await res.json()
+            if (result.profiles) {
+                profileMap = new Map(result.profiles.map((p: { id: number; name: string | null; NsiteID: number | null }) => [p.id, p]))
+            }
+        } catch {
+            // fallback: participantNames 사용
+        }
         const academyId: number | null = profileMap.get(myId)?.NsiteID || null
 
         // 전원 오답 합산 (리벤지 모드는 이미 개별 추적하므로 null)
@@ -647,7 +667,7 @@ export default function BattleClient({ room, myId, initialNames }: Props) {
             const id = Number(idStr)
             return {
                 id, score,
-                name: participantNames[id] || '???',
+                name: participantNames[id] || '...',
                 isMe: id === myId,
                 isLeft: leftPlayers.has(id),
             }
@@ -657,6 +677,12 @@ export default function BattleClient({ room, myId, initialNames }: Props) {
             if (a.isLeft !== b.isLeft) return a.isLeft ? 1 : -1
             return b.score - a.score
         })
+
+    // 이름이 아직 로드 안 된 참여자가 있으면 재조회
+    const hasUnnamed = leaderboard.some(e => e.name === '...')
+    useEffect(() => {
+        if (hasUnnamed) fetchNamesRef.current()
+    }, [hasUnnamed])
 
     function handleSelect(option: string) {
         if (selected !== null || quizState !== 'playing') return
@@ -901,11 +927,11 @@ export default function BattleClient({ room, myId, initialNames }: Props) {
                     />
                 </div>
                 <div className={styles.timerLabel}>
-                    <span className={styles.timerIcon}>
-                        <Timer size={12} /> 0초
-                    </span>
                     <span className={`${styles.timerCount} ${timerProgress <= 25 ? styles.timerCountUrgent : ''}`}>
                         {Math.ceil((timerProgress / 100) * timerDuration)}초
+                    </span>
+                    <span className={styles.timerIcon}>
+                        <Timer size={12} /> 0초
                     </span>
                 </div>
             </div>

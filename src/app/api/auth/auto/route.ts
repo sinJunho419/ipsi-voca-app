@@ -69,6 +69,28 @@ export async function GET(request: NextRequest) {
     const email = `nid_${nid}@inputnavi.internal`
     const displayName = sname || `학생_${nid}`
 
+    const nidNum = parseInt(nid!, 10)
+
+    // ── ipsinavi_Login_info 조회/생성 → loginInfoId 확보 ──
+    let loginInfoId: number
+    const { data: existingLogin } = await adminClient
+        .from('ipsinavi_login_info')
+        .select('id')
+        .eq('UserNID', nidNum)
+        .single()
+
+    if (existingLogin) {
+        loginInfoId = existingLogin.id
+    } else {
+        const { data: inserted } = await adminClient.from('ipsinavi_login_info').insert({
+            UserNID: nidNum,
+            UserName: displayName,
+            status: 'active',
+            expires_at: new Date(Date.now() + 10 * 60 * 60 * 1000).toISOString(),
+        }).select('id').single()
+        loginInfoId = inserted!.id
+    }
+
     const { error: createError } = await adminClient.auth.admin.createUser({
         email,
         email_confirm: true,
@@ -77,6 +99,7 @@ export async function GET(request: NextRequest) {
             sname: displayName,
             external_user_id: userId,
             source: 'inputnavi',
+            login_info_id: loginInfoId,
         },
     })
 
@@ -85,22 +108,25 @@ export async function GET(request: NextRequest) {
         return new NextResponse('Failed to provision user', { status: 500 })
     }
 
-    // 기존 유저: sname 최신화
-    if (createError?.message.includes('already been registered') && sname) {
+    // 기존 유저: sname 최신화 + login_info_id 보장
+    if (createError?.message.includes('already been registered')) {
         const { data: users } = await adminClient.auth.admin.listUsers()
         const existingUser = users?.users?.find(u => u.email === email)
         if (existingUser) {
             await adminClient.auth.admin.updateUserById(existingUser.id, {
-                user_metadata: { ...existingUser.user_metadata, sname, external_user_id: userId || existingUser.user_metadata?.external_user_id },
+                user_metadata: { ...existingUser.user_metadata, sname: sname || existingUser.user_metadata?.sname, external_user_id: userId || existingUser.user_metadata?.external_user_id, login_info_id: loginInfoId },
             })
-            await adminClient.from('profiles').upsert({ id: existingUser.id, name: sname }, { onConflict: 'id' })
+            // supabase_uid 연결
+            adminClient.from('ipsinavi_login_info').update({ supabase_uid: existingUser.id }).eq('id', loginInfoId).then(() => {})
+            await adminClient.from('profiles').upsert({ id: loginInfoId, name: sname || displayName }, { onConflict: 'id' })
         }
     } else if (!createError) {
-        // 신규 유저: profiles에 이름 저장
+        // 신규 유저
         const { data: users } = await adminClient.auth.admin.listUsers()
         const newUser = users?.users?.find(u => u.email === email)
         if (newUser) {
-            await adminClient.from('profiles').upsert({ id: newUser.id, name: displayName }, { onConflict: 'id' })
+            adminClient.from('ipsinavi_login_info').update({ supabase_uid: newUser.id }).eq('id', loginInfoId).then(() => {})
+            await adminClient.from('profiles').upsert({ id: loginInfoId, name: displayName }, { onConflict: 'id' })
         }
     }
 

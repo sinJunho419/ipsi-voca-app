@@ -74,6 +74,9 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
         const result = await res.json()
         if (res.ok && result.room) {
             setRoom(normalizeRoom(result.room))
+            if (result.names) {
+                setParticipantNames(prev => ({ ...prev, ...result.names }))
+            }
         }
     }, [roomId])
 
@@ -84,6 +87,26 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
         async function init() {
             const { data: { user } } = await supabase.auth.getUser()
             let uid: number | null = (user?.user_metadata?.login_info_id as number) || null
+
+            console.log('[battle] auth:', { login_info_id: user?.user_metadata?.login_info_id, nid: user?.user_metadata?.nid, uid })
+
+            // login_info_id가 없으면 nid로 ipsinavi_Login_info에서 조회
+            if (!uid && user) {
+                const nid = user.user_metadata?.nid
+                if (nid) {
+                    try {
+                        const res = await fetch('/api/battle', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ action: 'resolve_uid', nid: Number(nid) }),
+                            cache: 'no-store',
+                        })
+                        const result = await res.json()
+                        console.log('[battle] resolve_uid:', result)
+                        if (result.loginInfoId) uid = result.loginInfoId
+                    } catch (e) { console.error('[battle] resolve_uid error:', e) }
+                }
+            }
 
             if (!uid) {
                 const stored = localStorage.getItem('battle_guest_id')
@@ -97,6 +120,7 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
                 uid = guestId
             }
 
+            console.log('[battle] final uid:', uid)
             if (isMounted) setUserId(uid)
 
             const res = await fetch('/api/battle', {
@@ -107,6 +131,7 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
             })
 
             const result = await res.json()
+            console.log('[battle] get response:', { ok: res.ok, status: res.status, hasRoom: !!result.room, names: result.names, error: result.error })
             if (!res.ok || !result.room) {
                 if (isMounted) setErrorMsg('방을 찾을 수 없습니다.')
                 return
@@ -114,6 +139,10 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
 
             if (isMounted) {
                 setRoom(normalizeRoom(result.room))
+                // get 응답에 이름이 포함되어 있으면 즉시 반영
+                if (result.names && Object.keys(result.names).length > 0) {
+                    setParticipantNames(prev => ({ ...prev, ...result.names }))
+                }
                 setIsLoading(false)
             }
         }
@@ -130,7 +159,11 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
             .on(
                 'postgres_changes',
                 { event: 'UPDATE', schema: 'public', table: 'battle_rooms', filter: `id=eq.${roomId}` },
-                (payload) => setRoom(normalizeRoom(payload.new as RoomData))
+                (payload) => {
+                    setRoom(normalizeRoom(payload.new as RoomData))
+                    // 새 참여자 이름도 함께 갱신
+                    fetchRoom()
+                }
             )
             .on('broadcast', { event: 'room_updated' }, () => {
                 fetchRoom()
@@ -140,34 +173,37 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
         return () => { supabase.removeChannel(channel) }
     }, [roomId, supabase, fetchRoom])
 
-    // 2.5. 폴링: 3초마다 방 정보 갱신 (대기 상태에서만)
+    // 2.5. 폴링: 3초마다 방 정보 갱신 (대기 상태에서만, userId 확보 후)
     useEffect(() => {
-        if (!roomId || room?.status === 'playing' || room?.status === 'finished') return
+        if (!roomId || !userId || room?.status === 'playing' || room?.status === 'finished') return
 
         const pollInterval = setInterval(() => {
             fetchRoom()
         }, 3000)
 
         return () => { clearInterval(pollInterval) }
-    }, [roomId, room?.status, fetchRoom])
+    }, [roomId, userId, room?.status, fetchRoom])
 
     // 3. 참여자 이름 조회 (participant_ids 변경 시, API 경유로 RLS 우회)
     const participantKey = (room?.participant_ids || []).join(',')
     useEffect(() => {
         const ids = room?.participant_ids
-        if (!ids?.length) return
+        if (!ids?.length || userId == null) return
 
         async function fetchNames() {
-            const res = await fetch('/api/battle', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'names', ids, userId }),
-                cache: 'no-store',
-            })
-            const result = await res.json()
-            if (result.names) {
-                setParticipantNames(result.names)
-            }
+            try {
+                const res = await fetch('/api/battle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'names', ids, userId }),
+                    cache: 'no-store',
+                })
+                if (!res.ok) return
+                const result = await res.json()
+                if (result.names) {
+                    setParticipantNames(prev => ({ ...prev, ...result.names }))
+                }
+            } catch { /* 네트워크 에러 무시 */ }
         }
         fetchNames()
     }, [participantKey, userId]) // eslint-disable-line react-hooks/exhaustive-deps

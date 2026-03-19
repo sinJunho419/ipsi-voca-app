@@ -174,6 +174,7 @@ function SetupContent() {
                 .insert({
                     room_code: roomCode,
                     host_id: loginInfoId,
+                    participant_ids: [loginInfoId],
                     level,
                     set_no: selectedWordSets[0] ?? selectedIdiomSets[0] ?? 1,
                     status: 'waiting',

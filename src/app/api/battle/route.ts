@@ -104,6 +104,76 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { action } = body
 
+    // ── 인증 불필요 액션 ──
+
+    // nid → loginInfoId 변환 (login_info_id 없는 기존 세션 보완)
+    if (action === 'resolve_uid') {
+        const { nid } = body
+        if (!nid) return NextResponse.json({ error: 'nid required' }, { status: 400 })
+        const { data } = await admin
+            .from('ipsinavi_login_info')
+            .select('id')
+            .eq('UserNID', Number(nid))
+            .single()
+        return NextResponse.json({ loginInfoId: data?.id || null })
+    }
+
+    // 이름 조회 (RLS 우회, 프로필 없으면 자동 생성)
+    if (action === 'names') {
+        const { ids } = body
+        if (!ids || !Array.isArray(ids)) {
+            return NextResponse.json({ error: 'ids required' }, { status: 400 })
+        }
+
+        // 양수 ID만 프로필 조회 (음수는 게스트)
+        const validIds = ids.filter((id: number) => id > 0)
+        const names: Record<number, string> = {}
+
+        if (validIds.length > 0) {
+            const { data } = await admin.from('profiles').select('id, name').in('id', validIds)
+            if (data) {
+                data.forEach((p: { id: number; name: string | null }) => { names[Number(p.id)] = p.name || '익명' })
+            }
+
+            // 프로필이 없는 ID → ipsinavi_Login_info에서 조회 후 자동 생성
+            const missingIds = validIds.filter((id: number) => !names[id])
+            if (missingIds.length > 0) {
+                const { data: loginInfos } = await admin
+                    .from('ipsinavi_login_info')
+                    .select('id, UserName, NsiteID, Scomment')
+                    .in('id', missingIds)
+
+                if (loginInfos && loginInfos.length > 0) {
+                    const profilesToCreate = loginInfos.map((li: { id: number; UserName: string; NsiteID: number | null; Scomment: string | null }) => ({
+                        id: li.id,
+                        name: li.UserName,
+                        NsiteID: li.NsiteID,
+                        Scomment: li.Scomment,
+                        status: '0',
+                    }))
+                    await admin.from('profiles').upsert(profilesToCreate, { onConflict: 'id' })
+                    loginInfos.forEach((li: { id: number; UserName: string }) => {
+                        names[Number(li.id)] = li.UserName || '익명'
+                    })
+                }
+            }
+        }
+
+        // 게스트 ID 처리
+        ids.filter((id: number) => id < 0).forEach((id: number) => { names[id] = '게스트' })
+
+        return NextResponse.json({ names })
+    }
+
+    if (action === 'profiles') {
+        const { ids } = body
+        if (!ids || !Array.isArray(ids)) {
+            return NextResponse.json({ error: 'ids required' }, { status: 400 })
+        }
+        const { data } = await admin.from('profiles').select('id, name, NsiteID').in('id', ids)
+        return NextResponse.json({ profiles: data || [] })
+    }
+
     // 인증: 로그인 유저 우선, 없으면 클라이언트가 보낸 hostId(게스트 ID) 사용
     const rawId = await getAuthUserId() ?? (body.hostId != null ? Number(body.hostId) : null) ?? (body.userId != null ? Number(body.userId) : null)
     const authUserId: number | null = typeof rawId === 'number' && !isNaN(rawId) ? rawId : null
@@ -111,7 +181,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 })
     }
 
-    // ── 방 조회 (ID) ──
+    // ── 방 조회 (ID) + 참여자 이름 동시 반환 ──
     if (action === 'get') {
         const { roomId } = body
 
@@ -125,7 +195,42 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: '방을 찾을 수 없습니다.' }, { status: 404 })
         }
 
-        return NextResponse.json({ room })
+        // 참여자 이름도 함께 조회
+        const allIds = room.participant_ids || []
+        const pIds = allIds.filter((id: number) => id > 0)
+        const names: Record<number, string> = {}
+        // 게스트 ID 처리 (음수)
+        allIds.filter((id: number) => id < 0).forEach((id: number) => { names[id] = '게스트' })
+
+        console.log('[battle:get] participant_ids:', allIds, 'pIds:', pIds)
+
+        if (pIds.length > 0) {
+            const { data: profiles, error: profileErr } = await admin.from('profiles').select('id, name').in('id', pIds)
+            console.log('[battle:get] profiles query:', { profiles, error: profileErr?.message })
+            if (profiles) {
+                profiles.forEach((p: { id: number; name: string | null }) => { names[Number(p.id)] = p.name || '익명' })
+            }
+            // 프로필 없는 ID → ipsinavi_Login_info에서 자동 생성
+            const missing = pIds.filter((id: number) => !names[id])
+            console.log('[battle:get] missing after profiles:', missing)
+            if (missing.length > 0) {
+                const { data: lis, error: lisErr } = await admin.from('ipsinavi_login_info').select('id, UserName, NsiteID, Scomment').in('id', missing)
+                console.log('[battle:get] ipsinavi_login_info:', { lis, error: lisErr?.message })
+                if (lis && lis.length > 0) {
+                    const upsertResult = await admin.from('profiles').upsert(
+                        lis.map((li: { id: number; UserName: string; NsiteID: number | null; Scomment: string | null }) => ({
+                            id: li.id, name: li.UserName, NsiteID: li.NsiteID, Scomment: li.Scomment, status: '0',
+                        })),
+                        { onConflict: 'id' }
+                    )
+                    console.log('[battle:get] profiles upsert:', { error: upsertResult.error?.message })
+                    lis.forEach((li: { id: number; UserName: string }) => { names[Number(li.id)] = li.UserName || '익명' })
+                }
+            }
+        }
+
+        console.log('[battle:get] final names:', names)
+        return NextResponse.json({ room, names })
     }
 
     // ── 방 조회 (코드) ──
@@ -270,18 +375,62 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ ok: true })
     }
 
-    // ── 참여자 이름 조회 (RLS 우회) ──
-    if (action === 'names') {
-        const { ids } = body
-        if (!ids || !Array.isArray(ids)) {
-            return NextResponse.json({ error: 'ids required' }, { status: 400 })
+    // ── 학원 배틀 피드 조회 (최근 5건, RLS 우회) ──
+    if (action === 'feed') {
+        // 유저의 NsiteID 조회
+        const { data: profile } = await admin
+            .from('profiles').select('NsiteID').eq('id', authUserId).single()
+        if (!profile?.NsiteID) {
+            return NextResponse.json({ feeds: [] })
         }
-        const { data } = await admin.from('profiles').select('id, name').in('id', ids)
-        const names: Record<number, string> = {}
-        if (data) {
-            data.forEach((p: { id: number; name: string | null }) => { names[Number(p.id)] = p.name || '익명' })
+
+        // 같은 학원의 최근 배틀 (2명 이상, 승자 있는 것만)
+        const { data: battles } = await admin
+            .from('battle_history')
+            .select('id, winner_id, participants_ids, scores, created_at')
+            .eq('NsiteID', profile.NsiteID)
+            .not('winner_id', 'is', null)
+            .order('created_at', { ascending: false })
+            .limit(20)
+
+        // 2명 이상 필터 + 상위 5개
+        const multiBattles = (battles || [])
+            .filter(b => (b.participants_ids || []).length >= 2)
+            .slice(0, 5)
+
+        if (multiBattles.length === 0) {
+            return NextResponse.json({ feeds: [], academyId: profile.NsiteID })
         }
-        return NextResponse.json({ names })
+
+        // 관련 프로필 일괄 조회
+        const allIds = new Set<number>()
+        multiBattles.forEach(b => {
+            if (b.winner_id) allIds.add(b.winner_id)
+            ;(b.participants_ids || []).forEach((id: number) => allIds.add(id))
+        })
+        const { data: profiles } = await admin
+            .from('profiles').select('id, name').in('id', Array.from(allIds))
+        const nameMap: Record<number, string> = {}
+        ;(profiles || []).forEach((p: { id: number; name: string | null }) => {
+            nameMap[p.id] = p.name || '익명'
+        })
+
+        const feeds = multiBattles.map(b => {
+            const scores = b.scores as Record<string, number>
+            const sorted = Object.entries(scores).sort(([, a], [, b]) => b - a)
+            const loserId = sorted[1]?.[0] ? Number(sorted[1][0]) : null
+            return {
+                id: b.id,
+                winner_name: nameMap[b.winner_id] || '익명',
+                loser_name: loserId ? (nameMap[loserId] || '익명') : '상대',
+                winner_score: sorted[0]?.[1] || 0,
+                loser_score: sorted[1]?.[1] || 0,
+                participant_count: (b.participants_ids || []).length,
+                created_at: b.created_at,
+            }
+        })
+
+        return NextResponse.json({ feeds, academyId: profile.NsiteID })
     }
 
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 })

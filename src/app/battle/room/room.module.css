@@ -447,9 +447,13 @@
 
 .participantName {
     flex: 1;
+    min-width: 0;
     font-size: 0.9rem;
     font-weight: 600;
     color: #e2e8f0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .hostTag {
@@ -934,7 +938,6 @@
     border-radius: 4px;
     overflow: hidden;
     margin: 4px 0;
-    direction: rtl;
 }
 
 .timerFill {
