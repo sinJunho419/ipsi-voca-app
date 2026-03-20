@@ -132,6 +132,9 @@ export async function POST(request: NextRequest) {
         }
         console.log(`[auth] ${nid} 병렬완료: status=${ipsiStatus}, NsiteID=${ipsiNsiteID} +${Date.now() - t0}ms`)
 
+        if (dbResult.error && dbResult.error.code !== 'PGRST116') {
+            console.error('[auth] DB query error:', dbResult.error)
+        }
         const existingLogin = dbResult.data
 
         if (ipsiStatus !== 'active') {
@@ -149,7 +152,7 @@ export async function POST(request: NextRequest) {
 
         if (!existingLogin) {
             // 신규 사용자: INSERT (학원코드/학원명 포함)
-            const { data: inserted } = await adminClient.from('ipsinavi_login_info').insert({
+            const { data: inserted, error: insertError } = await adminClient.from('ipsinavi_login_info').insert({
                 UserNID: nidNum,
                 UserName: displayName,
                 NsiteID: ipsiNsiteID,
@@ -157,7 +160,11 @@ export async function POST(request: NextRequest) {
                 status: 'active',
                 expires_at: new Date(Date.now() + 10 * 60 * 60 * 1000).toISOString(),
             }).select('id').single()
-            loginInfoId = inserted!.id
+            if (insertError || !inserted) {
+                console.error('[auth] insert error:', insertError)
+                return sendError(`DB 저장 실패: ${insertError?.message || 'unknown'}`, IPSI_NAVI_URL, isJsonRequest)
+            }
+            loginInfoId = inserted.id
             console.log(`[auth] ${nid} ipsinavi_Login_info INSERT (id=${loginInfoId}) +${Date.now() - t0}ms`)
         } else {
             loginInfoId = existingLogin.id
@@ -184,10 +191,14 @@ export async function POST(request: NextRequest) {
         }
 
         // ── generateLink 먼저 시도 (재방문 유저 fast path) ──
-        let linkData = (await adminClient.auth.admin.generateLink({
+        const linkResult = await adminClient.auth.admin.generateLink({
             type: 'magiclink',
             email,
-        })).data
+        })
+        if (linkResult.error) {
+            console.error('[auth] generateLink error:', linkResult.error.message)
+        }
+        let linkData = linkResult.data
 
         console.log(`[auth] ${nid} generateLink 1차 +${Date.now() - t0}ms`)
 
@@ -208,6 +219,10 @@ export async function POST(request: NextRequest) {
 
         if (!linkData?.properties?.hashed_token) {
             return sendError('세션 생성에 실패했습니다.', IPSI_NAVI_URL, isJsonRequest)
+        }
+
+        if (!linkData.user) {
+            return sendError('사용자 정보를 가져올 수 없습니다.', IPSI_NAVI_URL, isJsonRequest)
         }
 
         const userId = linkData.user.id
