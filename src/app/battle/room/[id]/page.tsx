@@ -482,9 +482,7 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
                         />
                     </div>
                     <p className={`${styles.timerText} ${waitSeconds <= 10 ? styles.timerUrgent : ''}`}>
-                        {participantCount >= 2
-                            ? `${waitSeconds}초 후 자동 시작`
-                            : `${waitSeconds}초 후 방 자동 종료`}
+                        {`${waitSeconds}초 후 자동 시작`}
                     </p>
                 </div>
 
