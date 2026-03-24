@@ -187,28 +187,21 @@ export default function StudyClient({ initialWords, initialMaxSet }: Props) {
         setSetNo(null)
         setWords([])
         startTransition(async () => {
-            const { data: rangeData } = await supabase
-                .from('words')
-                .select('set_no, type')
-                .eq('level', newLevel)
-                .order('set_no', { ascending: true })
-
-            if (!rangeData || rangeData.length === 0) {
-                setAvailableSets([])
-                return
-            }
-
-            // (set_no, type) 쌍으로 중복 제거
-            const seen = new Set<string>()
-            const sets: { setNo: number; type: string }[] = []
-            for (const d of rangeData) {
-                const key = `${d.type}:${d.set_no}`
-                if (!seen.has(key)) {
-                    seen.add(key)
-                    sets.push({ setNo: d.set_no, type: d.type || 'word' })
+            try {
+                const res = await fetch('/api/words', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'sets', level: newLevel }),
+                })
+                const result = await res.json()
+                if (!res.ok || !result.sets) {
+                    setAvailableSets([])
+                    return
                 }
+                setAvailableSets(result.sets)
+            } catch {
+                setAvailableSets([])
             }
-            setAvailableSets(sets)
         })
     }
 
@@ -220,14 +213,17 @@ export default function StudyClient({ initialWords, initialMaxSet }: Props) {
         setSetNo(newSetNo)
         setSetType(type)
         startTransition(async () => {
-            let query = supabase.from('words').select('*').eq('level', level).eq('set_no', newSetNo)
-            if (type === 'idiom') {
-                query = query.eq('type', 'idiom')
-            } else {
-                query = query.neq('type', 'idiom')
+            try {
+                const res = await fetch('/api/words', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'query', level, setNo: newSetNo, type }),
+                })
+                const result = await res.json()
+                setWords((result.words ?? []) as Word[])
+            } catch {
+                setWords([])
             }
-            const { data } = await query.order('id')
-            setWords((data ?? []) as Word[])
             prevIndexRef.current = -1
             setCurrentIndex(0)
             setIsFlipped(false)

@@ -4,14 +4,14 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 let client: SupabaseClient | null = null
 
 /**
- * 브라우저에서 사용할 Supabase URL 결정
- * - HTTPS 배포 환경에서 HTTP Supabase 직접 호출 시 Mixed Content 차단됨
- * - Next.js rewrites 프록시(/supabase-proxy)를 통해 우회
+ * 브라우저에서 사용할 Supabase URL
+ * HTTPS 페이지 → HTTP Supabase 직접 호출 시 Mixed Content 차단됨
+ * → /api/supabase-proxy 를 통해 서버에서 중계
  */
-function getBrowserSupabaseUrl(): string {
+function getClientUrl(): string {
   const raw = process.env.NEXT_PUBLIC_SUPABASE_URL!
   if (typeof window !== 'undefined' && raw.startsWith('http://')) {
-    return `${window.location.origin}/supabase-proxy`
+    return `${window.location.origin}/api/supabase-proxy`
   }
   return raw
 }
@@ -24,7 +24,7 @@ export function createClient() {
   if (client) return client
 
   client = createBrowserClient(
-    getBrowserSupabaseUrl(),
+    getClientUrl(),
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       realtime: {
