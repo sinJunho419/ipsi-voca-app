@@ -19,13 +19,13 @@ function getClientUrl(): string {
 
 /**
  * 원본 Supabase URL 기반 storageKey 생성
- * 프록시 URL이 달라져도 인증 쿠키 이름이 원본과 동일하게 유지되어야
- * 서버(server.ts)와 브라우저(client.ts)가 같은 세션을 공유할 수 있음
+ * Supabase JS 내부 구현: `sb-${hostname.split('.')[0]}-auth-token`
+ * 프록시 URL이 달라져도 서버(server.ts)와 동일한 쿠키 이름을 사용해야 함
  */
 function getStorageKey(): string {
   try {
     const hostname = new URL(ORIGINAL_SUPABASE_URL).hostname
-    return `sb-${hostname}-auth-token`
+    return `sb-${hostname.split('.')[0]}-auth-token`
   } catch {
     return 'sb-auth-token'
   }
