@@ -467,10 +467,11 @@ export default function BattleClient({ room, myId, initialNames }: Props) {
     }, [])
 
     // 타임아웃 처리 → handleSelect로 통합
+    // selected !== null이면 이미 선택 처리 중이므로 무시 (다음 문제 전환 시 중복 타임아웃 방지)
     useEffect(() => {
-        if (timerProgress > 0 || quizState !== 'playing') return
+        if (timerProgress > 0 || quizState !== 'playing' || selected !== null) return
         handleSelect('__timeout__')
-    }, [timerProgress, quizState]) // eslint-disable-line react-hooks/exhaustive-deps
+    }, [timerProgress, quizState, selected]) // eslint-disable-line react-hooks/exhaustive-deps
 
     // quiz를 ref로도 보관 (타이머 effect에서 참조하되 의존성에 넣지 않음)
     const quizRef = useRef<QuizQuestion[]>(quiz)
@@ -732,7 +733,11 @@ export default function BattleClient({ room, myId, initialNames }: Props) {
 
             setTimeout(() => {
                 if (index + 1 >= total) setQuizState('finished')
-                else { setIndex(i => i + 1); setSelected(null) }
+                else {
+                    setTimerProgress(100) // 다음 문제 타임아웃 방지
+                    setIndex(i => i + 1)
+                    setSelected(null)
+                }
             }, 600)
         } else {
             wrongWordsRef.current.push(current.word.id)
@@ -749,7 +754,12 @@ export default function BattleClient({ room, myId, initialNames }: Props) {
             // 1.2초 후 자동으로 다음 문제
             setTimeout(() => {
                 if (index + 1 >= total) setQuizState('finished')
-                else { setIndex(i => i + 1); setSelected(null); setQuizState('playing') }
+                else {
+                    setTimerProgress(100) // 다음 문제 타임아웃 방지: 타이머 먼저 리셋
+                    setIndex(i => i + 1)
+                    setSelected(null)
+                    setQuizState('playing')
+                }
             }, 1200)
         }
     }
