@@ -19,6 +19,16 @@ const nextConfig: NextConfig = {
     root: path.resolve(__dirname),
   },
 
+  // Supabase HTTP → HTTPS 프록시 (Mixed Content 해결)
+  async rewrites() {
+    return [
+      {
+        source: '/supabase-proxy/:path*',
+        destination: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/:path*`,
+      },
+    ]
+  },
+
   // 보안 헤더
   async headers() {
     return [
