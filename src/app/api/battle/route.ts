@@ -106,6 +106,82 @@ export async function POST(request: NextRequest) {
 
     // ── 인증 불필요 액션 ──
 
+    // 세트 목록 조회 (service role → RLS 우회)
+    if (action === 'sets') {
+        const { level } = body
+        if (!level) return NextResponse.json({ error: 'level required' }, { status: 400 })
+
+        const { data, error } = await admin
+            .from('words')
+            .select('set_no, type')
+            .eq('level', level)
+            .order('set_no', { ascending: true })
+
+        if (error) {
+            return NextResponse.json({ error: error.message }, { status: 500 })
+        }
+
+        const rows = data || []
+        const wordSets = [...new Set(rows.filter(d => d.type !== 'idiom').map(d => d.set_no))].sort((a, b) => a - b)
+        const idiomSets = [...new Set(rows.filter(d => d.type === 'idiom').map(d => d.set_no))].sort((a, b) => a - b)
+
+        return NextResponse.json({ wordSets, idiomSets })
+    }
+
+    // 단어 조회 (배틀룸/배틀설정에서 사용, service role → RLS 우회)
+    if (action === 'words') {
+        const { ids, level, setNo, wordSets, idiomSets } = body
+
+        if (ids && Array.isArray(ids) && ids.length > 0) {
+            // question_ids로 조회
+            const { data, error } = await admin
+                .from('words')
+                .select('*')
+                .in('id', ids)
+            if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+            return NextResponse.json({ words: data || [] })
+        }
+
+        // 다중 세트 조회 (setup 페이지용)
+        if (level && (wordSets || idiomSets)) {
+            const queries = []
+            if (wordSets && wordSets.length > 0) {
+                queries.push(
+                    admin.from('words').select('*')
+                        .eq('level', level)
+                        .in('set_no', wordSets)
+                        .neq('type', 'idiom')
+                        .order('id')
+                )
+            }
+            if (idiomSets && idiomSets.length > 0) {
+                queries.push(
+                    admin.from('words').select('*')
+                        .eq('level', level)
+                        .in('set_no', idiomSets)
+                        .eq('type', 'idiom')
+                        .order('id')
+                )
+            }
+            const results = await Promise.all(queries)
+            const words = results.flatMap(r => r.data || [])
+            return NextResponse.json({ words })
+        }
+
+        if (level && setNo != null) {
+            // level + set_no로 조회
+            const { data, error } = await admin
+                .from('words')
+                .select('*')
+                .eq('level', level)
+                .eq('set_no', setNo)
+            if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+            return NextResponse.json({ words: data || [] })
+        }
+
+        return NextResponse.json({ error: 'ids or level+setNo required' }, { status: 400 })
+    }
+
     // nid → loginInfoId 변환 (login_info_id 없는 기존 세션 보완)
     if (action === 'resolve_uid') {
         const { nid } = body

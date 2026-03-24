@@ -47,7 +47,6 @@ function BattleCreateSettings({ onCancel, onCreate, creating, errorMsg }: {
     creating: boolean
     errorMsg: string
 }) {
-    const supabase = createClient()
     const [level, setLevel] = useState<Level>('elem_3')
     const [wordSets, setWordSets] = useState<number[]>([])
     const [idiomSets, setIdiomSets] = useState<number[]>([])
@@ -63,25 +62,33 @@ function BattleCreateSettings({ onCancel, onCreate, creating, errorMsg }: {
         let cancelled = false
         async function fetchSets() {
             setIsLoading(true)
-            const { data } = await supabase
-                .from('words')
-                .select('set_no, type')
-                .eq('level', level)
-                .order('set_no', { ascending: true })
-
-            if (cancelled) return
-            const rows = data || []
-            const wSets = [...new Set(rows.filter(d => d.type !== 'idiom').map(d => d.set_no))].sort((a, b) => a - b)
-            const iSets = [...new Set(rows.filter(d => d.type === 'idiom').map(d => d.set_no))].sort((a, b) => a - b)
-            setWordSets(wSets)
-            setIdiomSets(iSets)
+            try {
+                const res = await fetch('/api/battle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'sets', level }),
+                })
+                if (cancelled) return
+                const result = await res.json()
+                if (!res.ok || result.error) {
+                    setWordSets([])
+                    setIdiomSets([])
+                } else {
+                    setWordSets(result.wordSets || [])
+                    setIdiomSets(result.idiomSets || [])
+                }
+            } catch {
+                if (cancelled) return
+                setWordSets([])
+                setIdiomSets([])
+            }
             setSelectedWordSets([])
             setSelectedIdiomSets([])
             setIsLoading(false)
         }
         fetchSets()
         return () => { cancelled = true }
-    }, [level, supabase])
+    }, [level])
 
     function toggleWordSet(setNo: number) {
         setSelectedWordSets(prev =>
@@ -255,27 +262,19 @@ function LobbyContent() {
 
             const hostId = await getUserId(supabase)
 
-            // 선택된 단어/숙어 세트에서 ID 가져오기
-            const queries = []
-            if (config.selectedWordSets.length > 0) {
-                queries.push(
-                    supabase.from('words').select('id')
-                        .eq('level', config.level)
-                        .in('set_no', config.selectedWordSets)
-                        .neq('type', 'idiom')
-                )
-            }
-            if (config.selectedIdiomSets.length > 0) {
-                queries.push(
-                    supabase.from('words').select('id')
-                        .eq('level', config.level)
-                        .in('set_no', config.selectedIdiomSets)
-                        .eq('type', 'idiom')
-                )
-            }
-
-            const results = await Promise.all(queries)
-            const wordIds = results.flatMap(r => (r.data || []).map(w => w.id))
+            // 선택된 단어/숙어 세트에서 ID 가져오기 (서버 API 경유)
+            const wordsRes = await fetch('/api/battle', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'words',
+                    level: config.level,
+                    wordSets: config.selectedWordSets.length > 0 ? config.selectedWordSets : undefined,
+                    idiomSets: config.selectedIdiomSets.length > 0 ? config.selectedIdiomSets : undefined,
+                }),
+            })
+            const wordsResult = await wordsRes.json()
+            const wordIds = (wordsResult.words || []).map((w: { id: number }) => w.id)
 
             if (wordIds.length === 0) {
                 setErrorMsg('선택한 세트에 단어가 없습니다.')

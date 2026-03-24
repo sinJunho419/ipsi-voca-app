@@ -264,6 +264,7 @@ export default function BattleClient({ room, myId, initialNames }: Props) {
             let orderedWords: Word[] = []
 
             if (isRevenge) {
+                // 오답 복습: wrong_answers → word IDs → words API
                 const { data: wrongData } = await supabase
                     .from('wrong_answers')
                     .select('word_id')
@@ -274,27 +275,38 @@ export default function BattleClient({ room, myId, initialNames }: Props) {
 
                 if (wrongData && wrongData.length > 0) {
                     const wordIds = wrongData.map(d => d.word_id)
-                    const { data: words } = await supabase
-                        .from('words').select('*').in('id', wordIds)
-                    if (words && words.length > 0) {
-                        orderedWords = [...(words as Word[])].sort(() => Math.random() - 0.5)
+                    const res = await fetch('/api/battle', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'words', ids: wordIds }),
+                    })
+                    const result = await res.json()
+                    if (result.words && result.words.length > 0) {
+                        orderedWords = [...(result.words as Word[])].sort(() => Math.random() - 0.5)
                     }
                 }
             } else if (room.question_ids && room.question_ids.length > 0) {
-                const { data } = await supabase
-                    .from('words').select('*').in('id', room.question_ids)
-                if (data && data.length > 0) {
-                    const wordMap = new Map((data as Word[]).map(w => [w.id, w]))
+                const res = await fetch('/api/battle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'words', ids: room.question_ids }),
+                })
+                const result = await res.json()
+                if (result.words && result.words.length > 0) {
+                    const wordMap = new Map((result.words as Word[]).map((w: Word) => [w.id, w]))
                     orderedWords = room.question_ids
                         .map(id => wordMap.get(id))
                         .filter((w): w is Word => !!w)
                 }
             } else {
-                const { data } = await supabase
-                    .from('words').select('*')
-                    .eq('level', room.level).eq('set_no', room.set_no)
-                if (data && data.length > 0) {
-                    orderedWords = [...(data as Word[])].sort((a, b) => a.id - b.id)
+                const res = await fetch('/api/battle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'words', level: room.level, setNo: room.set_no }),
+                })
+                const result = await res.json()
+                if (result.words && result.words.length > 0) {
+                    orderedWords = [...(result.words as Word[])].sort((a: Word, b: Word) => a.id - b.id)
                 }
             }
 

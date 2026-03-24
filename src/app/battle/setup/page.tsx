@@ -55,29 +55,31 @@ function SetupContent() {
         setSelectedIdiomSets([])
         setFetchError('')
 
-        const supabaseFetch = async () => {
-            const { data, error } = await supabase
-                .from('words')
-                .select('set_no, type')
-                .eq('level', level)
-                .order('set_no', { ascending: true })
-
-            if (error || !data) {
+        const fetchSets = async () => {
+            try {
+                const res = await fetch('/api/battle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'sets', level }),
+                })
+                const result = await res.json()
+                if (!res.ok || result.error) {
+                    setWordSets([])
+                    setIdiomSets([])
+                    setSetsLoading(false)
+                    return
+                }
+                setWordSets(result.wordSets || [])
+                setIdiomSets(result.idiomSets || [])
+            } catch {
                 setWordSets([])
                 setIdiomSets([])
-                setSetsLoading(false)
-                return
             }
-
-            const wSets = [...new Set(data.filter(d => d.type !== 'idiom').map(d => d.set_no))].sort((a, b) => a - b)
-            const iSets = [...new Set(data.filter(d => d.type === 'idiom').map(d => d.set_no))].sort((a, b) => a - b)
-            setWordSets(wSets)
-            setIdiomSets(iSets)
             setSetsLoading(false)
         }
 
-        supabaseFetch()
-    }, [level])  // eslint-disable-line react-hooks/exhaustive-deps
+        fetchSets()
+    }, [level])
 
     // ── 세트 토글 (체크박스 다중 선택) ───────────────────────
     function toggleWordSet(setNo: number) {
@@ -114,36 +116,25 @@ function SetupContent() {
                 return
             }
 
-            // 선택된 단어/숙어 세트에서 데이터 가져오기
-            const queries = []
-            if (selectedWordSets.length > 0) {
-                queries.push(
-                    supabase.from('words').select('*')
-                        .eq('level', level)
-                        .in('set_no', selectedWordSets)
-                        .neq('type', 'idiom')
-                        .order('id')
-                )
-            }
-            if (selectedIdiomSets.length > 0) {
-                queries.push(
-                    supabase.from('words').select('*')
-                        .eq('level', level)
-                        .in('set_no', selectedIdiomSets)
-                        .eq('type', 'idiom')
-                        .order('id')
-                )
-            }
+            // 선택된 단어/숙어 세트에서 데이터 가져오기 (서버 API 경유)
+            const wordsRes = await fetch('/api/battle', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'words',
+                    level,
+                    wordSets: selectedWordSets.length > 0 ? selectedWordSets : undefined,
+                    idiomSets: selectedIdiomSets.length > 0 ? selectedIdiomSets : undefined,
+                }),
+            })
+            const wordsResult = await wordsRes.json()
 
-            const results = await Promise.all(queries)
-            const allData = results.flatMap(r => r.data || [])
-
-            if (allData.length === 0) {
+            if (!wordsRes.ok || !wordsResult.words || wordsResult.words.length === 0) {
                 setFetchError('단어 데이터를 불러오지 못했습니다. 다시 시도해주세요.')
                 return
             }
 
-            const words = allData as Word[]
+            const words = wordsResult.words as Word[]
 
             // 단어 수가 문항수보다 적으면 전체 사용
             const count = Math.min(questionCount, words.length)
