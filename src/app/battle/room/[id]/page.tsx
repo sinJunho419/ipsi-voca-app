@@ -85,65 +85,76 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
         let isMounted = true
 
         async function init() {
-            const { data: { user } } = await supabase.auth.getUser()
-            let uid: number | null = (user?.user_metadata?.login_info_id as number) || null
+            try {
+                // 인증 확인
+                let uid: number | null = null
+                try {
+                    const { data: { user } } = await supabase.auth.getUser()
+                    uid = (user?.user_metadata?.login_info_id as number) || null
 
-            console.log('[battle] auth:', { login_info_id: user?.user_metadata?.login_info_id, nid: user?.user_metadata?.nid, uid })
-
-            // login_info_id가 없으면 nid로 ipsinavi_Login_info에서 조회
-            if (!uid && user) {
-                const nid = user.user_metadata?.nid
-                if (nid) {
-                    try {
-                        const res = await fetch('/api/battle', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ action: 'resolve_uid', nid: Number(nid) }),
-                            cache: 'no-store',
-                        })
-                        const result = await res.json()
-                        console.log('[battle] resolve_uid:', result)
-                        if (result.loginInfoId) uid = result.loginInfoId
-                    } catch (e) { console.error('[battle] resolve_uid error:', e) }
+                    // login_info_id가 없으면 nid로 조회
+                    if (!uid && user) {
+                        const nid = user.user_metadata?.nid
+                        if (nid) {
+                            try {
+                                const res = await fetch('/api/battle', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ action: 'resolve_uid', nid: Number(nid) }),
+                                    cache: 'no-store',
+                                })
+                                const result = await res.json()
+                                if (result.loginInfoId) uid = result.loginInfoId
+                            } catch { /* ignore */ }
+                        }
+                    }
+                } catch {
+                    // 인증 실패 시 게스트로 진행
                 }
-            }
 
-            if (!uid) {
-                const stored = localStorage.getItem('battle_guest_id')
-                let guestId: number
-                if (stored) {
-                    guestId = Number(stored)
-                } else {
-                    guestId = -Math.floor(Math.random() * 1_000_000_000)
-                    localStorage.setItem('battle_guest_id', String(guestId))
+                if (!uid) {
+                    const stored = localStorage.getItem('battle_guest_id')
+                    let guestId: number
+                    if (stored) {
+                        guestId = Number(stored)
+                    } else {
+                        guestId = -Math.floor(Math.random() * 1_000_000_000)
+                        localStorage.setItem('battle_guest_id', String(guestId))
+                    }
+                    uid = guestId
                 }
-                uid = guestId
-            }
 
-            console.log('[battle] final uid:', uid)
-            if (isMounted) setUserId(uid)
+                if (isMounted) setUserId(uid)
 
-            const res = await fetch('/api/battle', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'get', roomId, userId: uid }),
-                cache: 'no-store',
-            })
+                const res = await fetch('/api/battle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'get', roomId, userId: uid }),
+                    cache: 'no-store',
+                })
 
-            const result = await res.json()
-            console.log('[battle] get response:', { ok: res.ok, status: res.status, hasRoom: !!result.room, names: result.names, error: result.error })
-            if (!res.ok || !result.room) {
-                if (isMounted) setErrorMsg('방을 찾을 수 없습니다.')
-                return
-            }
-
-            if (isMounted) {
-                setRoom(normalizeRoom(result.room))
-                // get 응답에 이름이 포함되어 있으면 즉시 반영
-                if (result.names && Object.keys(result.names).length > 0) {
-                    setParticipantNames(prev => ({ ...prev, ...result.names }))
+                const result = await res.json()
+                if (!res.ok || !result.room) {
+                    if (isMounted) {
+                        setErrorMsg('방을 찾을 수 없습니다.')
+                        setIsLoading(false)
+                    }
+                    return
                 }
-                setIsLoading(false)
+
+                if (isMounted) {
+                    setRoom(normalizeRoom(result.room))
+                    if (result.names && Object.keys(result.names).length > 0) {
+                        setParticipantNames(prev => ({ ...prev, ...result.names }))
+                    }
+                    setIsLoading(false)
+                }
+            } catch (e) {
+                console.error('[battle] init error:', e)
+                if (isMounted) {
+                    setErrorMsg('방 정보를 불러오는 중 오류가 발생했습니다.')
+                    setIsLoading(false)
+                }
             }
         }
 
